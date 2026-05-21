@@ -334,6 +334,18 @@ export const useBoardStore = defineStore('board', () => {
     task.labels = labels
   }
 
+  async function clearScheduledTime(taskId) {
+    const task = tasks.value.find(t => t.id === taskId)
+    if (!task) return
+    const filtered = (task.description || '').split('\n')
+      .filter(l => !l.startsWith('📅 Scheduled:') && !l.startsWith('📅 GCal:'))
+    const newDesc = filtered.join('\n').trim()
+    const newLabels = (task.labels || []).filter(l => l !== 'scheduled')
+    await api(token.value, `/tasks/${taskId}`, 'POST', { description: newDesc, labels: newLabels })
+    task.description = newDesc
+    task.labels = newLabels
+  }
+
   async function updateStatusText(taskId, content) {
     await api(token.value, `/tasks/${taskId}`, 'POST', { content })
     const task = tasks.value.find(t => t.id === taskId)
@@ -547,7 +559,7 @@ export const useBoardStore = defineStore('board', () => {
     setupStatus,
     initStages, saveToken, saveStages, resetToken, loadData, loadIfStale,
     projectStage, projectMeta, projectTasks, projectDeadline,
-    moveStage, completeTask, deleteTask, reorderTasks, quickAddTask, updateTaskDue, saveGCalEvent, saveScheduledTime, updateStatusText,
+    moveStage, completeTask, deleteTask, reorderTasks, quickAddTask, updateTaskDue, saveGCalEvent, saveScheduledTime, clearScheduledTime, updateStatusText,
     updateVenue, setDeadlineDate, addCollaborator, removeCollaborator, renameProject,
     projectDeadlineTaskBase, projectDeadlineTaskObj,
     projectSummaryTask, updateSummary, projectSubmissionTask, updateSubmissionUrl,

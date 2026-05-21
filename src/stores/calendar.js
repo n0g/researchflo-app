@@ -450,11 +450,41 @@ export const useCalendarStore = defineStore('calendar', () => {
     }
   }
 
+  async function reconcileScheduledTasks() {
+    if (!await _ensureToken()) return
+    const boardStore = useBoardStore()
+    const scheduledTasks = boardStore.tasks.filter(t =>
+      !t.is_completed && (t.description || '').includes('📅 GCal:')
+    )
+    await Promise.allSettled(scheduledTasks.map(async task => {
+      const stored = _parseGCalLine(task)
+      if (!stored) return
+      const res = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(stored.calId)}/events/${encodeURIComponent(stored.eventId)}`,
+        { headers: { Authorization: `Bearer ${accessToken.value}` } }
+      )
+      if (res.status === 404 || res.status === 410) {
+        await boardStore.clearScheduledTime(task.id)
+        return
+      }
+      if (!res.ok) return
+      const ev = await res.json()
+      if (!ev.start?.dateTime) return
+      const calIso = new Date(ev.start.dateTime).toISOString()
+      const descLine = (task.description || '').split('\n').find(l => l.startsWith('📅 Scheduled:'))
+      const m = descLine?.match(/\(([^)]+)\)$/)
+      const savedIso = m ? m[1] : null
+      if (calIso !== savedIso) {
+        await boardStore.saveScheduledTime(task.id, calIso)
+      }
+    }))
+  }
+
   return {
     clientId, events, loading, connectError, selectedCalendarId, calendarList, writableCalendars,
     isConnected, scheduledByTaskId,
     saveClientId, saveCalendarId, connect, disconnect,
     loadWeekEvents, createEvent, deleteEvent, deleteAllByTaskId, updateEvent, updateEventTitle, syncEventForTask, fetchCalendarList,
-    linkEventToTask,
+    linkEventToTask, reconcileScheduledTasks,
   }
 })
