@@ -945,3 +945,25 @@ html[data-theme="dark"] .seg-btn.active { background: rgba(255,255,255,0.15); }
 }
 .place-slot:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
 .place-slot:active { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+
+/* Current time indicator */
+.cal-now-line {
+  position: absolute;
+  right: 0;
+  width: calc(100% / 7);
+  height: 2px;
+  background: var(--accent);
+  pointer-events: none;
+  z-index: 3;
+  transform: translateY(-50%);
+}
+.cal-now-dot {
+  position: absolute;
+  left: -4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}

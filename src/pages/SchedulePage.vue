@@ -206,6 +206,13 @@
                       :style="{ left: pastDueOverlayLeft }"
                     ></div>
                     <div
+                      v-if="nowTop !== null"
+                      class="cal-now-line"
+                      :style="{ top: nowTop + 'px', left: nowLineLeft }"
+                    >
+                      <div class="cal-now-dot"></div>
+                    </div>
+                    <div
                       v-for="day in weekDays"
                       :key="isoDate(day)"
                       class="cal-day-col"
@@ -803,6 +810,7 @@ function _onF7PageAfterIn(page) {
 }
 
 onBeforeUnmount(() => {
+  clearInterval(nowTimer)
   document.removeEventListener('pointermove', onPointerMove)
   document.removeEventListener('pointerup', onPointerUp)
   if (ghostEl) { ghostEl.remove(); ghostEl = null }
@@ -856,7 +864,28 @@ watch(() => calStore.scheduledByTaskId, async (map) => {
   }
 })
 
+// ── Current time indicator ──
+const nowMinutes = ref(getNowMinutes())
+function getNowMinutes() {
+  const n = new Date()
+  return Math.round((n.getHours() * 60 + n.getMinutes()) / 15) * 15
+}
+let nowTimer = null
+const nowTop = computed(() => {
+  const todayInWeek = weekDays.value.some(d => isToday(d))
+  if (!todayInWeek) return null
+  const mins = nowMinutes.value - START_HOUR * 60
+  if (mins < 0 || mins > (END_HOUR - START_HOUR) * 60) return null
+  return (mins / 30) * SLOT_HEIGHT
+})
+const nowLineLeft = computed(() => {
+  const idx = weekDays.value.findIndex(d => isToday(d))
+  if (idx < 0) return '0%'
+  return `${(idx / 7) * 100}%`
+})
+
 onMounted(async () => {
+  nowTimer = setInterval(() => { nowMinutes.value = getNowMinutes() }, 60000)
   f7.on('pageAfterIn', _onF7PageAfterIn)
   store.initStages()
   await store.loadIfStale()
