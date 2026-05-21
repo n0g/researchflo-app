@@ -262,6 +262,17 @@ export const useBoardStore = defineStore('board', () => {
   }
 
   async function deleteTask(taskId) {
+    const task = tasks.value.find(t => t.id === taskId)
+    if (task) {
+      const gcalLine = (task.description || '').split('\n').find(l => l.startsWith('📅 GCal:'))
+      if (gcalLine) {
+        const parts = gcalLine.slice('📅 GCal: '.length).split('|')
+        if (parts.length === 2) {
+          const { useCalendarStore } = await import('./calendar.js')
+          useCalendarStore().unlinkTaskFromEvent(parts[0], parts[1]).catch(console.error)
+        }
+      }
+    }
     await api(token.value, `/tasks/${taskId}`, 'DELETE')
     tasks.value = tasks.value.filter(t => t.id !== taskId)
   }

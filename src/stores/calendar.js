@@ -450,6 +450,18 @@ export const useCalendarStore = defineStore('calendar', () => {
     }
   }
 
+  async function unlinkTaskFromEvent(eventId, calId) {
+    if (!await _ensureToken()) return
+    await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${encodeURIComponent(eventId)}`,
+      {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${accessToken.value}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ extendedProperties: { private: { todoist_task_id: null } } }),
+      }
+    )
+  }
+
   async function reconcileScheduledTasks() {
     if (!await _ensureToken()) return
     const boardStore = useBoardStore()
@@ -485,6 +497,6 @@ export const useCalendarStore = defineStore('calendar', () => {
     isConnected, scheduledByTaskId,
     saveClientId, saveCalendarId, connect, disconnect,
     loadWeekEvents, createEvent, deleteEvent, deleteAllByTaskId, updateEvent, updateEventTitle, syncEventForTask, fetchCalendarList,
-    linkEventToTask, reconcileScheduledTasks,
+    linkEventToTask, reconcileScheduledTasks, unlinkTaskFromEvent,
   }
 })
