@@ -12,7 +12,7 @@ export function parseTaskContent(text) {
 }
 
 export const DEFAULT_STAGES = [
-  { name: 'Planning',         label: 'stage::planning',            icon: 'seedling' },
+  { name: 'Planning',         label: 'stage::planning',            icon: 'potted-plant' },
   { name: 'Data Collection',  label: 'stage::data-collection',     icon: 'flask' },
   { name: 'Preparing',        label: 'stage::preparing-to-submit', icon: 'pencil-line' },
   { name: 'Revision',         label: 'stage::revision',            icon: 'eraser' },
@@ -21,7 +21,7 @@ export const DEFAULT_STAGES = [
 ]
 
 const DEFAULT_STAGE_ICONS = {
-  'stage::planning':            'seedling',
+  'stage::planning':            'potted-plant',
   'stage::data-collection':     'flask',
   'stage::preparing-to-submit': 'pencil-line',
   'stage::revision':            'eraser',
