@@ -21,7 +21,7 @@
                 :title="project.name"
                 @click="toggleProject(project.id)"
               >
-                <i class="ph ph-folder" aria-hidden="true"></i>
+                <i :class="activeProjectId === project.id ? 'ph ph-folder-open' : 'ph ph-folder'" aria-hidden="true"></i>
                 <span class="sidebar-label">{{ project.name }}</span>
               </button>
             </template>
