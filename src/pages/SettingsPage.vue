@@ -86,6 +86,25 @@
                   :data-index="i"
                 >
                   <span class="handle" aria-hidden="true" title="drag to reorder">⠿</span>
+                  <div class="icon-picker-wrap" @click.stop>
+                    <button
+                      class="icon-picker-btn"
+                      :aria-label="'Stage icon: ' + (row.icon || 'kanban')"
+                      :title="'Choose icon'"
+                      @click="toggleIconPicker(row.key)"
+                    ><i :class="`ph ph-${row.icon || 'kanban'}`" aria-hidden="true"></i></button>
+                    <div v-if="openIconPickerKey === row.key" class="icon-picker-dropdown">
+                      <button
+                        v-for="icon in STAGE_ICONS"
+                        :key="icon"
+                        class="icon-option"
+                        :class="{ selected: row.icon === icon }"
+                        :aria-label="icon"
+                        :title="icon"
+                        @click="selectIcon(row, icon)"
+                      ><i :class="`ph ph-${icon}`" aria-hidden="true"></i></button>
+                    </div>
+                  </div>
                   <input
                     type="text"
                     placeholder="Display name"
@@ -261,14 +280,14 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useBoardStore } from '../stores/board.js'
 import { useReviewsStore } from '../stores/reviews.js'
 import { useCalendarStore } from '../stores/calendar.js'
 import { useSidebar } from '../composables/useSidebar.js'
 import { useTheme } from '../composables/useTheme.js'
 import { useAccentColor } from '../composables/useAccentColor.js'
-import { DEFAULT_STAGES } from '../lib/helpers.js'
+import { DEFAULT_STAGES, getStageIcon } from '../lib/helpers.js'
 import { apiAll } from '../lib/todoist.js'
 import { initSortable } from '../lib/sortable.js'
 import AppSidebar from '../components/AppSidebar.vue'
@@ -287,13 +306,33 @@ const { setTheme, themePref } = useTheme()
 const { accentColor, setColor: setAccentColor } = useAccentColor()
 
 // ── Stages ──
+const STAGE_ICONS = [
+  'compass', 'flask', 'pencil-line', 'eraser', 'paper-plane-tilt', 'snowflake',
+  'lightbulb', 'ghost', 'target', 'clock', 'hourglass', 'check-circle',
+  'flag', 'star', 'bookmark', 'archive', 'folder', 'kanban',
+]
+
 const rowsEl = ref(null)
 let keyCounter = 0
-const stageRows = ref((boardStore.stages || DEFAULT_STAGES).map(s => ({ ...s, key: keyCounter++ })))
+const stageRows = ref((boardStore.stages || DEFAULT_STAGES).map(s => ({ ...s, icon: getStageIcon(s), key: keyCounter++ })))
 const stageError = ref('')
+const openIconPickerKey = ref(null)
 
 function addStageRow(labelVal = '', nameVal = '') {
-  stageRows.value.push({ name: nameVal, label: labelVal, key: keyCounter++ })
+  stageRows.value.push({ name: nameVal, label: labelVal, icon: 'kanban', key: keyCounter++ })
+}
+
+function toggleIconPicker(key) {
+  openIconPickerKey.value = openIconPickerKey.value === key ? null : key
+}
+
+function selectIcon(row, icon) {
+  row.icon = icon
+  openIconPickerKey.value = null
+}
+
+function closeIconPicker(e) {
+  if (!e.target.closest('.icon-picker-wrap')) openIconPickerKey.value = null
 }
 
 function fillLabel(name) {
@@ -304,7 +343,7 @@ function fillLabel(name) {
 
 function saveStages() {
   const stages = stageRows.value
-    .map(r => ({ name: r.name.trim(), label: r.label.trim() }))
+    .map(r => ({ name: r.name.trim(), label: r.label.trim(), icon: r.icon || 'kanban' }))
     .filter(r => r.name && r.label)
   if (!stages.length) { stageError.value = 'Add at least one stage.'; return }
   stageError.value = ''
@@ -349,8 +388,13 @@ function disconnect() {
 onMounted(async () => {
   proxyDraft.value = reviewsStore.proxyUrl
   if (rowsEl.value) initSortable(rowsEl.value, stageRows)
+  document.addEventListener('click', closeIconPicker)
   try {
     boardStore.labels = await apiAll(boardStore.token, '/labels')
   } catch { boardStore.labels = [] }
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', closeIconPicker)
 })
 </script>

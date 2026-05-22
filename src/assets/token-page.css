@@ -64,7 +64,7 @@ html[data-theme="light"] .token-box a { color: #3b82f6; }
 .stage-rows { display: flex; flex-direction: column; gap: 4px; }
 .stage-row {
   display: grid;
-  grid-template-columns: 24px 1fr 1fr 32px;
+  grid-template-columns: 24px 32px 1fr 1fr 32px;
   gap: 8px;
   align-items: center;
 }
@@ -89,6 +89,50 @@ html[data-theme="light"] .token-box a { color: #3b82f6; }
 }
 .stage-row .del:hover { color: var(--red); border-color: rgba(239,68,68,0.30); background: rgba(239,68,68,0.06); }
 .stage-row .del .ph { font-size: 16px; }
+
+.icon-picker-wrap { position: relative; }
+.icon-picker-btn {
+  width: 32px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text2);
+  transition: background 0.1s, color 0.1s;
+}
+.icon-picker-btn:hover { background: var(--bg3); color: var(--text); }
+.icon-picker-btn .ph { font-size: 16px; }
+
+.icon-picker-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 100;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  padding: 6px;
+  display: grid;
+  grid-template-columns: repeat(6, 32px);
+  gap: 2px;
+}
+html[data-theme="dark"] .icon-picker-dropdown { box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+
+.icon-option {
+  width: 32px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text2);
+  transition: background 0.1s, color 0.1s;
+}
+.icon-option:hover { background: var(--bg2); color: var(--text); }
+.icon-option.selected { background: var(--accent); color: #fff; border-color: var(--accent); }
+.icon-option .ph { font-size: 16px; }
 
 .section-label {
   font-size: 11px;

@@ -7,6 +7,7 @@
     @dragover.prevent
   >
     <div class="col-head">
+      <i :class="`ph ph-${getStageIcon(stage)}`" class="col-icon" aria-hidden="true"></i>
       <span class="col-name">{{ stage.name }}</span>
       <span class="col-count">{{ projects.length }}</span>
     </div>
@@ -27,7 +28,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useBoardStore } from '../stores/board.js'
-import { getProjectDeadline, stripPersonPrefix } from '../lib/helpers.js'
+import { getProjectDeadline, stripPersonPrefix, getStageIcon } from '../lib/helpers.js'
 import ProjectCard from './ProjectCard.vue'
 
 const props = defineProps({

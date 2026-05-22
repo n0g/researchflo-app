@@ -131,6 +131,7 @@
                 :aria-expanded="stagePopupOpen"
                 @click.stop="stagePopupOpen = !stagePopupOpen"
               >
+                <i :class="`ph ph-${getStageIcon(stageObj)}`" class="stage-popup-icon" aria-hidden="true"></i>
                 <span>{{ stageObj?.name ?? 'Unassigned' }}</span>
                 <i class="ph ph-caret-down popup-chevron" aria-hidden="true"></i>
               </button>
@@ -143,7 +144,10 @@
                   :aria-selected="stageInfo?.label === stage.label"
                   :class="{ selected: stageInfo?.label === stage.label }"
                   @click="selectStage(stage)"
-                >{{ stage.name }}</button>
+                >
+                  <i :class="`ph ph-${getStageIcon(stage)}`" aria-hidden="true"></i>
+                  {{ stage.name }}
+                </button>
               </div>
             </div>
           </div>
@@ -303,6 +307,12 @@
 
         <!-- Right tasks pane -->
         <section class="project-tasks" aria-label="Project tasks" @keydown="handleTasksKey">
+          <transition name="celebration">
+            <div v-if="showCelebration" class="tasks-celebration" aria-live="polite">
+              <i class="ph ph-confetti" aria-hidden="true"></i>
+              <p>All done. On to new adventures.</p>
+            </div>
+          </transition>
           <div class="tasks-header">
             <div class="tasks-title">Project Tasks</div>
             <div class="tasks-subtitle">{{ tasks.length }} open task{{ tasks.length !== 1 ? 's' : '' }}</div>
@@ -369,7 +379,7 @@ import { f7 } from 'framework7-vue/bundle'
 import { useBoardStore } from '../stores/board.js'
 import { useReviewsStore } from '../stores/reviews.js'
 import { useSidebar } from '../composables/useSidebar.js'
-import { VENUES, stripPersonPrefix, isPersonLabel } from '../lib/helpers.js'
+import { VENUES, stripPersonPrefix, isPersonLabel, getStageIcon } from '../lib/helpers.js'
 import { fetchPaperStatus, extractPaperId, matchSiteForUrl } from '../lib/hotcrp.js'
 
 import AppSidebar from '../components/AppSidebar.vue'
@@ -731,6 +741,21 @@ function handleTasksKey(e) {
   }
 }
 
+// ── Celebration ──
+const showCelebration = ref(false)
+const prevTaskCount = ref(-1)
+let celebrationTimer = null
+
+watch(tasks, (newVal) => {
+  const prev = prevTaskCount.value
+  prevTaskCount.value = newVal.length
+  if (prev > 0 && newVal.length === 0) {
+    showCelebration.value = true
+    clearTimeout(celebrationTimer)
+    celebrationTimer = setTimeout(() => { showCelebration.value = false }, 2500)
+  }
+})
+
 // ── Tasks ──
 function startAddTask() {
   addingTask.value = true
@@ -778,5 +803,6 @@ onMounted(async () => {
 
 onUnmounted(() => {
   document.removeEventListener('click', onDocClick)
+  clearTimeout(celebrationTimer)
 })
 </script>

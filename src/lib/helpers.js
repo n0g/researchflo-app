@@ -12,13 +12,27 @@ export function parseTaskContent(text) {
 }
 
 export const DEFAULT_STAGES = [
-  { name: 'Planning',         label: 'stage::planning' },
-  { name: 'Data Collection',  label: 'stage::data-collection' },
-  { name: 'Preparing',        label: 'stage::preparing-to-submit' },
-  { name: 'Revision',         label: 'stage::revision' },
-  { name: 'Awaiting Reviews', label: 'stage::under-submission' },
-  { name: 'On Ice',           label: 'stage::on-ice' },
+  { name: 'Planning',         label: 'stage::planning',            icon: 'compass' },
+  { name: 'Data Collection',  label: 'stage::data-collection',     icon: 'flask' },
+  { name: 'Preparing',        label: 'stage::preparing-to-submit', icon: 'pencil-line' },
+  { name: 'Revision',         label: 'stage::revision',            icon: 'eraser' },
+  { name: 'Awaiting Reviews', label: 'stage::under-submission',    icon: 'paper-plane-tilt' },
+  { name: 'On Ice',           label: 'stage::on-ice',              icon: 'snowflake' },
 ]
+
+const DEFAULT_STAGE_ICONS = {
+  'stage::planning':            'compass',
+  'stage::data-collection':     'flask',
+  'stage::preparing-to-submit': 'pencil-line',
+  'stage::revision':            'eraser',
+  'stage::under-submission':    'paper-plane-tilt',
+  'stage::on-ice':              'snowflake',
+}
+
+export function getStageIcon(stage) {
+  if (!stage || !stage.label) return 'ghost'
+  return stage.icon || DEFAULT_STAGE_ICONS[stage.label] || 'kanban'
+}
 
 export const VENUES = ['ccs', 'usenix', 'ndss', 's&p', 'soups', 'chi', 'cscw', 'pets', 'popets']
 

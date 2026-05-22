@@ -134,6 +134,11 @@ html[data-theme="dark"] .board-loading { background: var(--bg-surface); }
   gap: 8px;
   flex-shrink: 0;
 }
+.col-icon {
+  font-size: 15px;
+  color: var(--text3);
+  flex-shrink: 0;
+}
 .col-name {
   font-size: 15px;
   font-weight: 600;
