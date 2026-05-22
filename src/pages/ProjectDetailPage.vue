@@ -671,8 +671,8 @@ const stagePopupOpen = ref(false)
 
 async function selectStage(stage) {
   stagePopupOpen.value = false
-  if (!stageInfo.value || stageInfo.value.label === stage.label) return
-  await store.moveStage(projectId.value, stageInfo.value.task.id, stageInfo.value.label, stage.label).catch(console.error)
+  if (stageInfo.value?.label === stage.label) return
+  await store.moveStage(projectId.value, stageInfo.value?.task.id ?? '', stageInfo.value?.label ?? '', stage.label).catch(console.error)
 }
 
 // ── Collaborator combo ──
