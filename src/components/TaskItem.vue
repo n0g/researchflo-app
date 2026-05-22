@@ -27,7 +27,7 @@
       </div>
       <div
         class="task-check"
-        :class="{ done: completing }"
+        :class="{ done: completing, striking: striking }"
         role="button"
         tabindex="0"
         aria-label="Complete task"
