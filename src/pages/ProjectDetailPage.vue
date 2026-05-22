@@ -185,25 +185,48 @@
             <!-- Deadline (right) -->
             <div class="meta-section">
               <div class="meta-label">Deadline</div>
-              <div class="deadline-input-row">
-                <input
-                  class="meta-date-visible"
-                  :class="deadlineDateClass"
-                  type="date"
-                  :value="deadlineDateValue"
-                  aria-label="Deadline date"
-                  @change="onDeadlineChange"
-                  @keydown.enter.prevent="($event.target).blur()"
-                >
-                <button
-                  v-if="deadlineDateValue"
-                  class="deadline-clear-btn"
-                  aria-label="Remove deadline"
-                  @click="store.setDeadlineDate(projectId, '').catch(console.error)"
-                >
-                  <i class="ph ph-x" aria-hidden="true"></i>
-                </button>
-              </div>
+              <template v-if="!editingDeadline">
+                <div class="deadline-view-row">
+                  <div
+                    class="meta-editable"
+                    :class="[{ placeholder: !deadlineDateValue }, deadlineDateClass]"
+                    role="button"
+                    tabindex="0"
+                    aria-label="Edit deadline"
+                    @click="startEditDeadline"
+                    @keydown.enter.prevent="startEditDeadline"
+                    @keydown.space.prevent="startEditDeadline"
+                  >{{ formattedDeadline || 'Add deadline…' }}</div>
+                  <button
+                    v-if="deadlineDateValue"
+                    class="deadline-clear-btn"
+                    aria-label="Remove deadline"
+                    @click="store.setDeadlineDate(projectId, '').catch(console.error)"
+                  ><i class="ph ph-x" aria-hidden="true"></i></button>
+                </div>
+              </template>
+              <template v-else>
+                <div class="deadline-input-row">
+                  <input
+                    ref="dateInputEl"
+                    class="meta-date-visible"
+                    type="date"
+                    :value="deadlineDateValue"
+                    aria-label="Deadline date"
+                    @change="onDeadlineChange"
+                    @blur="stopEditDeadline"
+                    @keydown.escape.prevent="stopEditDeadline"
+                    @keydown.enter.prevent="dateInputEl?.blur()"
+                  >
+                  <button
+                    v-if="deadlineDateValue"
+                    class="deadline-clear-btn"
+                    aria-label="Remove deadline"
+                    @mousedown.prevent
+                    @click="store.setDeadlineDate(projectId, '').catch(console.error); stopEditDeadline()"
+                  ><i class="ph ph-x" aria-hidden="true"></i></button>
+                </div>
+              </template>
             </div>
           </div>
 
@@ -221,7 +244,7 @@
                 @click="startEditSubmission"
                 @keydown.enter.prevent="startEditSubmission"
                 @keydown.space.prevent="startEditSubmission"
-              >{{ submissionUrl || 'Add submission URL…' }}</div>
+              >{{ submissionUrlDisplay || 'Add submission URL…' }}</div>
               <input
                 v-else
                 ref="submissionInputEl"
@@ -473,6 +496,24 @@ const personLabels = computed(() =>
 )
 
 // ── Deadline ──
+const editingDeadline = ref(false)
+const dateInputEl = ref(null)
+
+async function startEditDeadline() {
+  editingDeadline.value = true
+  await nextTick()
+  dateInputEl.value?.focus()
+  dateInputEl.value?.showPicker?.()
+}
+
+function stopEditDeadline() { editingDeadline.value = false }
+
+const formattedDeadline = computed(() => {
+  if (!deadlineDateValue.value) return ''
+  const [y, m, d] = deadlineDateValue.value.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+})
+
 const deadlineDateValue = computed(() => {
   if (!deadline.value) return ''
   const d = deadline.value
@@ -489,6 +530,7 @@ const deadlineDateClass = computed(() => {
 
 async function onDeadlineChange(e) {
   await store.setDeadlineDate(projectId.value, e.target.value).catch(console.error)
+  editingDeadline.value = false
 }
 
 // ── Venue ──
@@ -593,6 +635,10 @@ const submissionUrl = computed(() => {
   const mdMatch = raw.match(/\[.*?\]\((https?:\/\/[^)]+)\)/)
   return mdMatch ? mdMatch[1] : raw
 })
+const submissionUrlDisplay = computed(() =>
+  submissionUrl.value.replace(/^https?:\/\/(www\.)?/, '')
+)
+
 const editingSubmission = ref(false)
 const submissionDraft = ref('')
 const submissionInputEl = ref(null)

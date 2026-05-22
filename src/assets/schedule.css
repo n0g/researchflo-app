@@ -296,8 +296,9 @@ html[data-theme="light"] .schedule-due-urgent { color: #b45309; }
 /* Triage fields */
 .triage-fields { display: flex; flex-direction: column; gap: 28px; }
 .triage-field {}
-.deadline-input-row { display: flex; align-items: center; gap: 6px; }
-.deadline-input-row .meta-date-visible { flex: 1; }
+.deadline-input-row, .deadline-view-row { display: flex; align-items: center; gap: 6px; }
+.deadline-input-row input.meta-date-visible { flex: 1; }
+.deadline-view-row .meta-editable { flex: 1; }
 .deadline-clear-btn {
   display: flex; align-items: center; justify-content: center;
   width: 28px; height: 28px; flex-shrink: 0;
