@@ -175,7 +175,7 @@ html[data-theme="dark"] .board-loading { background: var(--bg-surface); }
   padding: 48px 12px 24px;
   opacity: 0.25;
 }
-.empty-col .ph { font-size: 60px; }
+.empty-col .ph { font-size: 35px; }
 
 /* ── PROJECT CARD (Stitch) ── */
 .card {
