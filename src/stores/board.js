@@ -377,9 +377,8 @@ export const useBoardStore = defineStore('board', () => {
   }
 
   async function addCollaborator(projectId, name) {
-    const stageInfo = getProjectStage(tasks.value, stageLabels.value, projectId)
-    if (!stageInfo) return
-    const task = stageInfo.task
+    const task = getProjectStage(tasks.value, stageLabels.value, projectId)?.task ?? projectStatusTask(projectId)
+    if (!task) return
     const label = `person::${name}`
     const newLabels = [...(task.labels || []), label]
     await api(token.value, `/tasks/${task.id}`, 'POST', { labels: newLabels })
@@ -387,9 +386,8 @@ export const useBoardStore = defineStore('board', () => {
   }
 
   async function removeCollaborator(projectId, name) {
-    const stageInfo = getProjectStage(tasks.value, stageLabels.value, projectId)
-    if (!stageInfo) return
-    const task = stageInfo.task
+    const task = getProjectStage(tasks.value, stageLabels.value, projectId)?.task ?? projectStatusTask(projectId)
+    if (!task) return
     const newLabels = (task.labels || []).filter(l => stripPersonPrefix(l) !== name)
     await api(token.value, `/tasks/${task.id}`, 'POST', { labels: newLabels })
     task.labels = newLabels
