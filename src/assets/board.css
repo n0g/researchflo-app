@@ -170,11 +170,11 @@ html[data-theme="dark"] .board-loading { background: var(--bg-surface); }
 }
 
 .empty-col {
-  font-size: 20px;
+  font-size: 40px;
   color: var(--text3);
   text-align: center;
-  padding: 24px 12px;
-  opacity: 0.5;
+  padding: 48px 12px 24px;
+  opacity: 0.25;
 }
 
 /* ── PROJECT CARD (Stitch) ── */
