@@ -228,7 +228,7 @@ html[data-theme="dark"] .due-soon-text { color: var(--amber); }
 .meta-editable:hover { background: var(--bg2); }
 .meta-editable:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .meta-editable.placeholder { color: var(--text3); font-style: italic; }
-textarea.meta-textarea {
+.meta-textarea {
   width: 100%;
   box-sizing: border-box;
   font-size: 14px;
@@ -244,10 +244,10 @@ textarea.meta-textarea {
   min-height: 80px;
   box-shadow: inset 0 1px 3px rgba(0,0,0,0.07);
 }
-html[data-theme="dark"] textarea.meta-textarea { box-shadow: inset 0 1px 3px rgba(0,0,0,0.25); }
-textarea.meta-textarea:focus { box-shadow: inset 0 1px 3px rgba(0,0,0,0.07), 0 0 0 3px var(--accent-bg); }
-html[data-theme="dark"] textarea.meta-textarea:focus { box-shadow: inset 0 1px 3px rgba(0,0,0,0.25), 0 0 0 3px var(--accent-bg); }
-input.meta-input {
+html[data-theme="dark"] .meta-textarea { box-shadow: inset 0 1px 3px rgba(0,0,0,0.25); }
+.meta-textarea:focus { box-shadow: inset 0 1px 3px rgba(0,0,0,0.07), 0 0 0 3px var(--accent-bg); }
+html[data-theme="dark"] .meta-textarea:focus { box-shadow: inset 0 1px 3px rgba(0,0,0,0.25), 0 0 0 3px var(--accent-bg); }
+.meta-input {
   width: 100%;
   box-sizing: border-box;
   font-size: 14px;
@@ -260,9 +260,9 @@ input.meta-input {
   outline: none;
   box-shadow: inset 0 1px 3px rgba(0,0,0,0.07);
 }
-html[data-theme="dark"] input.meta-input { box-shadow: inset 0 1px 3px rgba(0,0,0,0.25); }
-input.meta-input:focus { border: none; box-shadow: inset 0 1px 3px rgba(0,0,0,0.07), 0 0 0 3px var(--accent-bg); }
-html[data-theme="dark"] input.meta-input:focus { border: none; box-shadow: inset 0 1px 3px rgba(0,0,0,0.25), 0 0 0 3px var(--accent-bg); }
+html[data-theme="dark"] .meta-input { box-shadow: inset 0 1px 3px rgba(0,0,0,0.25); }
+.meta-input:focus { box-shadow: inset 0 1px 3px rgba(0,0,0,0.07), 0 0 0 3px var(--accent-bg); }
+html[data-theme="dark"] .meta-input:focus { box-shadow: inset 0 1px 3px rgba(0,0,0,0.25), 0 0 0 3px var(--accent-bg); }
 
 /* Side-by-side meta row */
 .meta-row-pair {
@@ -336,7 +336,7 @@ html[data-theme="dark"] .sub-chip-red    { color: #f87171; }
 .spin-icon { display: inline-block; animation: spin-once 1s linear infinite; }
 
 /* Visible deadline date input */
-input.meta-date-visible {
+.meta-date-visible {
   font-size: 13px;
   font-family: var(--font);
   color: var(--text);
@@ -350,9 +350,9 @@ input.meta-date-visible {
   box-sizing: border-box;
   box-shadow: inset 0 1px 3px rgba(0,0,0,0.07);
 }
-html[data-theme="dark"] input.meta-date-visible { box-shadow: inset 0 1px 3px rgba(0,0,0,0.25); }
-input.meta-date-visible:focus { border: none; box-shadow: inset 0 1px 3px rgba(0,0,0,0.07), 0 0 0 3px var(--accent-bg); }
-html[data-theme="dark"] input.meta-date-visible:focus { border: none; box-shadow: inset 0 1px 3px rgba(0,0,0,0.25), 0 0 0 3px var(--accent-bg); }
+html[data-theme="dark"] .meta-date-visible { box-shadow: inset 0 1px 3px rgba(0,0,0,0.25); }
+.meta-date-visible:focus { border: none; box-shadow: inset 0 1px 3px rgba(0,0,0,0.07), 0 0 0 3px var(--accent-bg); }
+html[data-theme="dark"] .meta-date-visible:focus { border: none; box-shadow: inset 0 1px 3px rgba(0,0,0,0.25), 0 0 0 3px var(--accent-bg); }
 .meta-date-visible.overdue-text { color: var(--overdue); }
 .meta-date-visible.due-soon-text { color: var(--due-soon); }
 
@@ -755,13 +755,15 @@ html[data-theme="light"] .project-tasks { background: var(--bg-pane-right); }
   font-family: var(--font);
   color: var(--text);
   background: var(--bg2);
-  border: 1px solid var(--accent);
-  border-radius: 4px;
+  border: none;
+  border-radius: 6px;
   padding: 2px 6px;
   outline: none;
   width: 100%;
   line-height: 1.4;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.07), 0 0 0 3px var(--accent-bg);
 }
+html[data-theme="dark"] .task-title-edit { box-shadow: inset 0 1px 3px rgba(0,0,0,0.25), 0 0 0 3px var(--accent-bg); }
 .task-link { color: var(--accent); text-decoration: none; }
 .task-link:hover { text-decoration: underline; }
 .task-cal-badge {
