@@ -170,7 +170,7 @@ html[data-theme="dark"] .board-loading { background: var(--bg-surface); }
 }
 
 .empty-col {
-  font-size: 40px;
+  font-size: 60px;
   color: var(--text3);
   text-align: center;
   padding: 48px 12px 24px;
