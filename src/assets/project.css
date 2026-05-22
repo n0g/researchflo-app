@@ -738,7 +738,8 @@ html[data-theme="light"] .project-tasks { background: var(--bg-pane-right); }
 }
 .is-dragging .task-item { opacity: 0.35; }
 .is-dragging .task-hover-actions { opacity: 0 !important; }
-.task-name { font-size: 14px; font-weight: 600; color: var(--text); line-height: 1.4; cursor: text; }
+.task-name { font-size: 14px; font-weight: 600; color: var(--text); line-height: 1.4; cursor: text; transition: color 0.15s, text-decoration-color 0.15s; }
+.task-name-done { text-decoration: line-through; color: var(--text3); }
 .task-title-edit {
   font-size: 14px;
   font-weight: 600;

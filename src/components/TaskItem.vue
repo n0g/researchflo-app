@@ -36,7 +36,7 @@
         @keydown.space.prevent="complete"
       ></div>
       <div class="task-content">
-        <div v-if="!editingTitle" class="task-name" role="button" tabindex="0" @click.stop="startTitleEdit" @keydown.enter.prevent="startTitleEdit">
+        <div v-if="!editingTitle" class="task-name" :class="{ 'task-name-done': striking }" role="button" tabindex="0" @click.stop="startTitleEdit" @keydown.enter.prevent="startTitleEdit">
           <span v-if="priorityLabel" class="sr-only">{{ priorityLabel }}: </span>
           <template v-for="seg in contentSegments" :key="seg.i">
             <a v-if="seg.href" :href="seg.href" target="_blank" rel="noopener noreferrer" class="task-link" @click.stop>{{ seg.text }}</a>
@@ -98,6 +98,7 @@ const taskItemEl = ref(null)
 const titleInputEl = ref(null)
 const editingTitle = ref(false)
 const completing = ref(false)
+const striking = ref(false)
 let calendarInstance = null
 
 // ── Swipe state ──
@@ -214,6 +215,8 @@ const formattedDue = computed(() => formatDate(props.task.due?.date ?? ''))
 
 async function complete() {
   completing.value = true
+  striking.value = true
+  await new Promise(r => setTimeout(r, 350))
   await store.completeTask(props.task.id).catch(console.error)
 }
 
