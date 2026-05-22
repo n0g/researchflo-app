@@ -9,7 +9,6 @@
     <div class="col-head">
       <i :class="`ph ph-${getStageIcon(stage)}`" class="col-icon" aria-hidden="true"></i>
       <span class="col-name">{{ stage.name }}</span>
-      <span class="col-count">{{ projects.length }}</span>
     </div>
     <div class="col-body" :id="'col-' + stageIndex" role="list">
       <div v-if="!projects.length" class="empty-col">—</div>
