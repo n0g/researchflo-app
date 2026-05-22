@@ -11,7 +11,7 @@
       <span class="col-name">{{ stage.name }}</span>
     </div>
     <div class="col-body" :id="'col-' + stageIndex" role="list">
-      <div v-if="!projects.length" class="empty-col">—</div>
+      <div v-if="!projects.length" class="empty-col"><i class="ph ph-hand-waving" aria-hidden="true"></i></div>
       <ProjectCard
         v-for="project in projects"
         :key="project.id"

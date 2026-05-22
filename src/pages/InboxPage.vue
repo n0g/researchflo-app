@@ -19,6 +19,7 @@
 
           <div ref="taskListEl" role="list" aria-label="Inbox tasks" @pointerdown="onDragStart">
             <div v-if="!inboxTasks.length" class="triage-empty-list">
+              <i v-if="store.inboxProjectId" class="ph ph-wind" aria-hidden="true"></i>
               {{ store.inboxProjectId ? 'Inbox is empty' : 'Inbox project not found' }}
             </div>
             <template v-for="(task, idx) in inboxTasks" :key="task.id">
