@@ -42,7 +42,7 @@
         title="Schedule"
         @click="currentPage !== 'schedule' && goSchedule()"
       >
-        <i class="ph ph-calendar" aria-hidden="true"></i>
+        <i class="ph ph-calendar-dots" aria-hidden="true"></i>
         <span class="sidebar-label">Schedule</span>
       </button>
     </nav>
