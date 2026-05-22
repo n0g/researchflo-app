@@ -225,7 +225,7 @@ html[data-theme="dark"] .due-soon-text { color: var(--amber); }
   white-space: pre-wrap;
   word-break: break-word;
 }
-.meta-editable:hover { border-color: var(--border); background: var(--bg2); }
+.meta-editable:hover { background: var(--bg2); }
 .meta-editable:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .meta-editable.placeholder { color: var(--text3); font-style: italic; }
 .meta-textarea {
@@ -236,14 +236,17 @@ html[data-theme="dark"] .due-soon-text { color: var(--amber); }
   color: var(--text);
   line-height: 1.55;
   background: var(--bg2);
-  border: 1px solid var(--border2);
+  border: none;
   border-radius: 8px;
   padding: 8px 10px;
   resize: vertical;
   outline: none;
   min-height: 80px;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.07);
 }
-.meta-textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-bg); }
+html[data-theme="dark"] .meta-textarea { box-shadow: inset 0 1px 3px rgba(0,0,0,0.25); }
+.meta-textarea:focus { box-shadow: inset 0 1px 3px rgba(0,0,0,0.07), 0 0 0 3px var(--accent-bg); }
+html[data-theme="dark"] .meta-textarea:focus { box-shadow: inset 0 1px 3px rgba(0,0,0,0.25), 0 0 0 3px var(--accent-bg); }
 .meta-input {
   width: 100%;
   box-sizing: border-box;
@@ -251,12 +254,15 @@ html[data-theme="dark"] .due-soon-text { color: var(--amber); }
   font-family: var(--font);
   color: var(--text);
   background: var(--bg2);
-  border: 1px solid var(--border2);
+  border: none;
   border-radius: 8px;
   padding: 6px 10px;
   outline: none;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.07);
 }
-.meta-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-bg); }
+html[data-theme="dark"] .meta-input { box-shadow: inset 0 1px 3px rgba(0,0,0,0.25); }
+.meta-input:focus { box-shadow: inset 0 1px 3px rgba(0,0,0,0.07), 0 0 0 3px var(--accent-bg); }
+html[data-theme="dark"] .meta-input:focus { box-shadow: inset 0 1px 3px rgba(0,0,0,0.25), 0 0 0 3px var(--accent-bg); }
 
 /* Side-by-side meta row */
 .meta-row-pair {
@@ -335,15 +341,18 @@ html[data-theme="dark"] .sub-chip-red    { color: #f87171; }
   font-family: var(--font);
   color: var(--text);
   background: var(--bg2);
-  border: 1px solid var(--border2);
+  border: none;
   border-radius: 8px;
   padding: 5px 8px;
   outline: none;
   cursor: pointer;
   width: 100%;
   box-sizing: border-box;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.07);
 }
-.meta-date-visible:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-bg); }
+html[data-theme="dark"] .meta-date-visible { box-shadow: inset 0 1px 3px rgba(0,0,0,0.25); }
+.meta-date-visible:focus { box-shadow: inset 0 1px 3px rgba(0,0,0,0.07), 0 0 0 3px var(--accent-bg); }
+html[data-theme="dark"] .meta-date-visible:focus { box-shadow: inset 0 1px 3px rgba(0,0,0,0.25), 0 0 0 3px var(--accent-bg); }
 .meta-date-visible.overdue-text { color: var(--overdue); }
 .meta-date-visible.due-soon-text { color: var(--due-soon); }
 
