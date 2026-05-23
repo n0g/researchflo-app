@@ -14,8 +14,9 @@ export const useAuthStore = defineStore('auth', () => {
   const stored = readStoredSession()
   const user = ref(stored?.user ?? null)
   const session = ref(stored ?? null)
+  // Set to true after a magic-link sign-in so App.vue can prompt passkey registration
+  const pendingPasskeySetup = ref(false)
 
-  // Validate/refresh session in the background after mount
   async function init() {
     try {
       const { data } = await supabase.auth.getSession()
@@ -30,7 +31,6 @@ export const useAuthStore = defineStore('auth', () => {
       user.value = s?.user ?? null
     })
 
-    // Re-sync session when app comes back to foreground (handles iOS PWA background kill)
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') {
         supabase.auth.getSession().then(({ data }) => {
@@ -41,14 +41,9 @@ export const useAuthStore = defineStore('auth', () => {
     })
   }
 
-  async function signIn(email, password) {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) throw error
-  }
-
   async function signOut() {
     await supabase.auth.signOut()
   }
 
-  return { user, session, init, signIn, signOut }
+  return { user, session, pendingPasskeySetup, init, signOut }
 })
