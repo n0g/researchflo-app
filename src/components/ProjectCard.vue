@@ -250,7 +250,7 @@ onMounted(() => {
       ghost.style.visibility = 'hidden'
       const el = document.elementFromPoint(e.clientX, e.clientY)
       ghost.style.visibility = ''
-      const col = el?.closest('.col[data-stage-label]') ?? null
+      const col = el?.closest('.col[data-stage-id]') ?? null
       if (col !== currentCol) {
         currentCol?.classList.remove('drag-over')
         currentCol = col

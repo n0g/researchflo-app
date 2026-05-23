@@ -3,7 +3,7 @@
     class="col"
     :class="{ 'drag-over': dragOver }"
     :data-stage="stageIndex"
-    :data-stage-id="stage.id"
+    :data-stage-id="stage.id ?? ''"
     @dragover.prevent
   >
     <div class="col-head">
