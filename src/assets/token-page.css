@@ -1,5 +1,13 @@
 /* Token page and Setup page */
 
+/* ── APP BOOT (while resolving Supabase session) ── */
+.app-boot {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+}
+
+
 /* ── LOGIN PAGE ── */
 .login-page .page-content {
   display: flex !important;

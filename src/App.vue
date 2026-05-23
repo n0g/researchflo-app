@@ -1,10 +1,10 @@
 <template>
-  <f7-app v-bind="f7params">
-    <!-- Loading auth state -->
-    <f7-view v-if="authStore.loading" main url="/" />
+  <!-- Show nothing while resolving auth session -->
+  <div v-if="authStore.loading" class="app-boot" />
 
+  <f7-app v-else v-bind="f7params">
     <!-- Not signed in to Supabase -->
-    <f7-view v-else-if="!authStore.user" main url="/login/" />
+    <f7-view v-if="!authStore.user" main url="/login/" />
 
     <!-- Signed in but no Todoist token yet -->
     <f7-view v-else-if="!store.token" main url="/token/" />
