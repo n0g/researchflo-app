@@ -170,7 +170,7 @@ async function main() {
         if (settingsErr) {
           console.error(`   ✗ Settings upsert failed: ${settingsErr.message}`)
         } else {
-          console.log(`   ✓ stages, hotcrp_sites, hotcrp_proxy`)
+          console.log(`   ✓ stages, hotcrp_sites`)
         }
       } else {
         console.log('   (no app-settings task found — skipping)')
@@ -225,8 +225,6 @@ async function main() {
         summary,
         submission_url: submissionUrl,
         energy,
-        is_inbox: false,
-        sort_order: project.child_order ?? 0,
       })
       .select('id')
       .single()
