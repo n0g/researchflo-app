@@ -54,12 +54,14 @@ useAccentColor()
 
 const authStore = useAuthStore()
 
-// Detect magic-link hash synchronously so the template can suppress LoginPage
+// Detect auth callbacks synchronously so the template can suppress LoginPage
 // while we exchange the token — prevents the passkey popup from appearing.
+// PKCE flow: ?code= in query string. Implicit flow: #type=magiclink in hash.
 const exchangingMagicLink = ref(false)
 {
+  const sp = new URLSearchParams(window.location.search)
   const hp = new URLSearchParams(window.location.hash.slice(1))
-  if (hp.get('type') === 'magiclink' || hp.get('type') === 'email') {
+  if (sp.has('code') || hp.get('type') === 'magiclink' || hp.get('type') === 'email') {
     exchangingMagicLink.value = true
   }
 }
@@ -116,9 +118,9 @@ onMounted(async () => {
 
   await authStore.init()
 
-  // Clear hash only after Supabase has had a chance to exchange the tokens
-  if (window.location.hash) {
-    window.history.replaceState({}, '', window.location.pathname + window.location.search)
+  // Clear auth callback params after Supabase has exchanged the tokens
+  if (window.location.hash || new URLSearchParams(window.location.search).has('code')) {
+    window.history.replaceState({}, '', window.location.pathname)
   }
 
   const fromMagicLink = exchangingMagicLink.value
