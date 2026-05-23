@@ -5,13 +5,28 @@ const FUNCTIONS_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
 async function callFn(name, body, token) {
   const headers = { 'Content-Type': 'application/json' }
   if (token) headers['Authorization'] = `Bearer ${token}`
-  const res = await fetch(`${FUNCTIONS_URL}/${name}`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  })
-  const data = await res.json()
-  if (!res.ok) throw new Error(data.error || `${name} failed`)
+  let res
+  try {
+    res = await fetch(`${FUNCTIONS_URL}/${name}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    })
+  } catch (err) {
+    console.error(`[passkey] network error calling ${name}:`, err)
+    throw new Error(`Network error: ${err.message}`)
+  }
+  let data
+  try {
+    data = await res.json()
+  } catch {
+    console.error(`[passkey] non-JSON response from ${name}, status ${res.status}`)
+    throw new Error(`${name} returned an unexpected response (${res.status})`)
+  }
+  if (!res.ok) {
+    console.error(`[passkey] ${name} error response:`, data)
+    throw new Error(data.error || `${name} failed`)
+  }
   return data
 }
 
@@ -192,10 +207,11 @@ export async function registerPasskey() {
 }
 
 export async function listPasskeys() {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('passkeys')
     .select('id, device_label, created_at, last_used_at')
     .order('created_at', { ascending: true })
+  if (error) console.error('[passkey] listPasskeys error:', error)
   return data || []
 }
 
