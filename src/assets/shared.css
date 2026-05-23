@@ -61,7 +61,7 @@ html[data-theme="dark"] .btn {
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 html[data-theme="light"] .btn.primary { color: #fff; }
 .btn.primary:hover { opacity: 0.85; }
-.btn.sm { padding: 5px 11px; font-size: 12px; }
+.btn.sm { padding: 7px 10px; font-size: 13px; }
 .btn.icon { padding: 6px 8px; font-size: 15px; }
 .btn.danger { color: var(--red); border-color: rgba(239,68,68,0.3); }
 .btn.danger:hover { background: rgba(239,68,68,0.06); }
