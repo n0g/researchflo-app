@@ -3,15 +3,12 @@ import { ref } from 'vue'
 import { fetchReviewPapers, fetchPaperStatus, extractPaperId, matchSiteForUrl } from '../lib/hotcrp.js'
 
 const SITES_KEY = 'rb_hotcrp_sites'
-const PROXY_KEY = 'rb_hotcrp_proxy'
 
 export const useReviewsStore = defineStore('reviews', () => {
   const sites = ref(JSON.parse(localStorage.getItem(SITES_KEY) || '[]'))
-  const proxyUrl = ref(localStorage.getItem(PROXY_KEY) || '')
   const results = ref([])
   const loading = ref(false)
   const lastUpdated = ref(null)
-  // { [projectId]: { status: string, fetchedAt: number } }
   const submissionStatuses = ref({})
 
   function saveSites() {
@@ -21,15 +18,6 @@ export const useReviewsStore = defineStore('reviews', () => {
   function setSites(newSites) {
     sites.value = newSites
     saveSites()
-  }
-
-  function saveProxy(url) {
-    proxyUrl.value = url.trim()
-    if (proxyUrl.value) {
-      localStorage.setItem(PROXY_KEY, proxyUrl.value)
-    } else {
-      localStorage.removeItem(PROXY_KEY)
-    }
   }
 
   function addSite(url, token, name) {
@@ -54,7 +42,7 @@ export const useReviewsStore = defineStore('reviews', () => {
     loading.value = true
     try {
       const settled = await Promise.allSettled(
-        sites.value.map(site => fetchReviewPapers(site.url, site.token, proxyUrl.value))
+        sites.value.map(site => fetchReviewPapers(site.url, site.token))
       )
       results.value = settled.map((r, i) => ({
         site: sites.value[i],
@@ -67,7 +55,6 @@ export const useReviewsStore = defineStore('reviews', () => {
     }
   }
 
-  // projects: Array<{ id: string, submissionUrl: string }>
   async function loadSubmissionStatuses(projects) {
     if (!sites.value.length) return
     const TEN_MIN = 10 * 60 * 1000
@@ -84,7 +71,7 @@ export const useReviewsStore = defineStore('reviews', () => {
       const site = matchSiteForUrl(sites.value, submissionUrl)
       const pid = extractPaperId(submissionUrl)
       try {
-        const paper = await fetchPaperStatus(site.url, pid, site.token, proxyUrl.value)
+        const paper = await fetchPaperStatus(site.url, pid, site.token)
         if (paper) {
           submissionStatuses.value = {
             ...submissionStatuses.value,
@@ -100,5 +87,5 @@ export const useReviewsStore = defineStore('reviews', () => {
     }))
   }
 
-  return { sites, proxyUrl, results, loading, lastUpdated, submissionStatuses, addSite, removeSite, setSites, saveProxy, loadAll, loadSubmissionStatuses }
+  return { sites, results, loading, lastUpdated, submissionStatuses, addSite, removeSite, setSites, loadAll, loadSubmissionStatuses }
 })

@@ -5,32 +5,6 @@
     <div class="setup-content">
       <div class="setup-box">
 
-        <!-- Proxy URL -->
-        <div class="section-label">CORS proxy</div>
-        <p class="sub" style="margin-bottom:12px">
-          Browsers block direct HotCRP requests (CORS). Route them through a proxy that adds the required headers.
-          Use <code class="inline-code">https://corsproxy.io/?url=</code> for zero-setup, or
-          <a class="setup-link" href="https://developers.cloudflare.com/workers/" target="_blank" rel="noopener">your own Cloudflare Worker</a>
-          for full control.
-        </p>
-        <input
-          type="text"
-          v-model="proxyDraft"
-          placeholder="https://corsproxy.io/?url="
-          aria-label="Proxy URL"
-          @keydown.enter.prevent="saveProxy"
-        >
-        <div class="setup-actions" style="margin-top:8px">
-          <button v-if="store.proxyUrl" class="btn" @click="clearProxy">Clear</button>
-          <button class="btn primary" @click="saveProxy">Save</button>
-        </div>
-        <p v-if="store.proxyUrl" class="proxy-active">
-          Active: <code class="inline-code">{{ store.proxyUrl }}</code>
-        </p>
-        <p v-else class="proxy-inactive">No proxy set — fetches will fail due to CORS.</p>
-
-        <hr class="divider">
-
         <!-- Sites -->
         <div class="section-label">Configured sites</div>
         <div v-if="!store.sites.length" class="no-labels" style="margin-bottom:16px">No sites configured yet</div>
@@ -90,7 +64,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref } from 'vue'
 import { f7 } from 'framework7-vue/bundle'
 import { useReviewsStore } from '../stores/reviews.js'
 
@@ -98,21 +72,10 @@ const store = useReviewsStore()
 const tokenInputEl = ref(null)
 const nameInputEl = ref(null)
 
-const proxyDraft = ref(store.proxyUrl)
-watch(() => store.proxyUrl, val => { proxyDraft.value = val })
 const newUrl = ref('')
 const newToken = ref('')
 const newName = ref('')
 const addError = ref('')
-
-function saveProxy() {
-  store.saveProxy(proxyDraft.value)
-}
-
-function clearProxy() {
-  proxyDraft.value = ''
-  store.saveProxy('')
-}
 
 function focusToken() { tokenInputEl.value?.focus() }
 function focusName() { nameInputEl.value?.focus() }
@@ -131,6 +94,4 @@ function addSite() {
   newToken.value = ''
   newName.value = ''
 }
-
-onMounted(() => { proxyDraft.value = store.proxyUrl })
 </script>

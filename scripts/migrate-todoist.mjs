@@ -166,7 +166,6 @@ async function main() {
           user_id: USER_ID,
           stages: parsed.stages ?? null,
           hotcrp_sites: parsed.hotcrp_sites ?? null,
-          hotcrp_proxy: parsed.hotcrp_proxy ?? null,
         }, { onConflict: 'user_id', ignoreDuplicates: false })
         if (settingsErr) {
           console.error(`   ✗ Settings upsert failed: ${settingsErr.message}`)

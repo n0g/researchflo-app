@@ -1,14 +1,18 @@
-export async function fetchWhoami(siteUrl, token, proxyUrl = '') {
-  return _hotcrpGet(siteUrl, token, proxyUrl, '/api/whoami')
+import { supabase } from './supabase.js'
+
+const PROXY_URL = 'https://oqqevpkeqcbkqrgabpkc.supabase.co/functions/v1/hotcrp-proxy'
+
+export async function fetchWhoami(siteUrl, token) {
+  return _hotcrpGet(siteUrl, token, '/api/whoami')
 }
 
-export async function fetchReviewPapers(siteUrl, token, proxyUrl = '') {
-  const data = await _hotcrpGet(siteUrl, token, proxyUrl, '/api/papers?q=re:me')
+export async function fetchReviewPapers(siteUrl, token) {
+  const data = await _hotcrpGet(siteUrl, token, '/api/papers?q=re:me')
   return Array.isArray(data) ? data : (data.papers || [])
 }
 
-export async function fetchPaperStatus(siteUrl, paperId, token, proxyUrl = '') {
-  const data = await _hotcrpGet(siteUrl, token, proxyUrl, `/api/papers?q=${paperId}`)
+export async function fetchPaperStatus(siteUrl, paperId, token) {
+  const data = await _hotcrpGet(siteUrl, token, `/api/papers?q=${paperId}`)
   if (Array.isArray(data)) return data[0] ?? null
   if (data.papers) return data.papers[0] ?? null
   return data.pid ? data : null
@@ -36,23 +40,21 @@ function _normalizeError(err) {
   return err
 }
 
-async function _hotcrpGet(siteUrl, token, proxyUrl, path) {
+async function _hotcrpGet(siteUrl, token, path) {
   const base = siteUrl.replace(/\/+$/, '')
   try {
-    return await _hotcrpFetch(`${base}${path}`, token, proxyUrl)
+    return await _hotcrpFetch(`${base}${path}`, token)
   } catch (err) {
     if (!/function not found/i.test(err.message)) throw _normalizeError(err)
-    // Retry 1: some instances use api.php/ prefix instead of api/
     const phpPath = path.replace(/^\/api\//, '/api.php/')
     try {
-      return await _hotcrpFetch(`${base}${phpPath}`, token, proxyUrl)
+      return await _hotcrpFetch(`${base}${phpPath}`, token)
     } catch (retryErr) {
       if (!/function not found/i.test(retryErr.message)) throw _normalizeError(retryErr)
-      // Retry 2: HotCRP v3 uses singular 'paper' instead of 'papers'
       const singularPath = phpPath.replace('/papers', '/paper')
       if (singularPath === phpPath) throw _normalizeError(retryErr)
       try {
-        return await _hotcrpFetch(`${base}${singularPath}`, token, proxyUrl)
+        return await _hotcrpFetch(`${base}${singularPath}`, token)
       } catch (finalErr) {
         throw _normalizeError(finalErr)
       }
@@ -60,28 +62,16 @@ async function _hotcrpGet(siteUrl, token, proxyUrl, path) {
   }
 }
 
-async function _hotcrpFetch(hotcrpUrl, token, proxyUrl) {
-
-  // Pass token as query param to the Worker so it adds Authorization server-side,
-  // avoiding CORS preflight caused by custom request headers from the browser.
-  // For direct requests (no proxy), send the header directly.
-  // Strip any trailing ?url= or &url= that users may have stored from the old corsproxy.io format
-  const proxyBase = proxyUrl.replace(/[?&]url=.*$/, '').replace(/\/+$/, '')
-  const url = proxyUrl
-    ? `${proxyBase}?url=${encodeURIComponent(hotcrpUrl)}&token=${encodeURIComponent(token)}`
-    : hotcrpUrl
-
-  const init = proxyUrl ? {} : { headers: { 'Authorization': `Bearer ${token}` } }
+async function _hotcrpFetch(hotcrpUrl, token) {
+  const { data: { session } } = await supabase.auth.getSession()
+  const url = `${PROXY_URL}?url=${encodeURIComponent(hotcrpUrl)}&token=${encodeURIComponent(token)}`
+  const init = session ? { headers: { Authorization: `Bearer ${session.access_token}` } } : {}
 
   let r
   try {
     r = await fetch(url, init)
   } catch {
-    throw new Error(
-      proxyUrl
-        ? 'Network error — check your proxy URL and that the service is running'
-        : 'Network error — configure a proxy URL in Settings to bypass CORS'
-    )
+    throw new Error('Network error — check your connection')
   }
 
   if (!r.ok) {
