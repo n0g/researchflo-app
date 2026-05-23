@@ -23,6 +23,9 @@ CREATE POLICY "passkeys_select_own" ON public.passkeys
 
 -- INSERT / UPDATE / DELETE only via edge functions using service role key
 
+-- Run this if the table already exists (adds device label column):
+-- ALTER TABLE public.passkeys ADD COLUMN IF NOT EXISTS device_label text DEFAULT '';
+
 
 -- Short-lived WebAuthn challenges (5-minute TTL)
 -- Accessed only via service role key from edge functions — no client policies needed

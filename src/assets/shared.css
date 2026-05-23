@@ -321,6 +321,46 @@ html[data-theme="dark"] .settings-sheet {
   align-items: center;
   gap: 6px;
 }
+.settings-row-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.settings-inline-msg {
+  font-size: 13px;
+  color: var(--text2);
+}
+.settings-row--passkey-header {
+  padding-bottom: 6px;
+}
+.passkey-empty {
+  font-size: 13px;
+  color: var(--text3);
+  padding: 4px 0 10px;
+}
+.passkey-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+.passkey-row-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.passkey-row-label {
+  font-size: 14px;
+  color: var(--text);
+  font-weight: 500;
+}
+.passkey-row-meta {
+  font-size: 12px;
+  color: var(--text2);
+}
 .settings-hint {
   font-size: 13px;
   color: var(--text2);

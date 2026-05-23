@@ -264,6 +264,31 @@
                   @keydown.enter.prevent="$event.target.blur()"
                 />
               </div>
+              <template v-if="passkeySupported">
+                <div class="settings-row settings-row--passkey-header">
+                  <span class="settings-row-label">Passkeys</span>
+                  <div class="settings-row-right">
+                    <span v-if="passkeyMsg" class="settings-inline-msg">{{ passkeyMsg }}</span>
+                    <button class="btn sm" :disabled="passkeyBusy" @click="addPasskey">
+                      {{ passkeyBusy ? 'Adding…' : 'Add passkey' }}
+                    </button>
+                  </div>
+                </div>
+                <div v-if="passkeys.length === 0" class="passkey-empty">
+                  No passkeys registered.
+                </div>
+                <div v-for="pk in passkeys" :key="pk.id" class="passkey-row">
+                  <div class="passkey-row-info">
+                    <span class="passkey-row-label">{{ pk.device_label || 'Unknown device' }}</span>
+                    <span class="passkey-row-meta">Added {{ formatPasskeyDate(pk.created_at) }} · Last used {{ formatPasskeyDate(pk.last_used_at) }}</span>
+                  </div>
+                  <button
+                    class="btn sm danger"
+                    :disabled="deletingPasskeyId === pk.id"
+                    @click="removePasskey(pk.id)"
+                  >{{ deletingPasskeyId === pk.id ? '…' : 'Remove' }}</button>
+                </div>
+              </template>
               <div class="settings-row">
                 <span class="settings-row-label">Signed in</span>
                 <button class="btn sm danger" @click="signOut">Sign out</button>
@@ -289,6 +314,7 @@ import { useTheme } from '../composables/useTheme.js'
 import { useAccentColor } from '../composables/useAccentColor.js'
 import { DEFAULT_STAGES, getStageIcon } from '../lib/helpers.js'
 import { initSortable } from '../lib/sortable.js'
+import { registerPasskey, listPasskeys, deletePasskey, isPasskeySupported } from '../lib/passkey.js'
 import AppSidebar from '../components/AppSidebar.vue'
 import AppTabbar from '../components/AppTabbar.vue'
 
@@ -396,6 +422,48 @@ async function onEmailChange(person, value) {
 // ── Account ──
 const authStore = useAuthStore()
 const displayName = ref('')
+const passkeySupported = isPasskeySupported()
+const passkeyBusy = ref(false)
+const passkeyMsg = ref('')
+const passkeys = ref([])
+const deletingPasskeyId = ref(null)
+
+async function loadPasskeys() {
+  if (!passkeySupported) return
+  passkeys.value = await listPasskeys().catch(() => [])
+}
+
+function formatPasskeyDate(iso) {
+  const d = new Date(iso)
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+async function addPasskey() {
+  passkeyMsg.value = ''
+  passkeyBusy.value = true
+  try {
+    await registerPasskey()
+    await loadPasskeys()
+    passkeyMsg.value = 'Passkey added.'
+    setTimeout(() => { passkeyMsg.value = '' }, 3000)
+  } catch (err) {
+    if (err.message !== 'cancelled') passkeyMsg.value = err.message || 'Failed to add passkey.'
+  } finally {
+    passkeyBusy.value = false
+  }
+}
+
+async function removePasskey(id) {
+  deletingPasskeyId.value = id
+  try {
+    await deletePasskey(id)
+    passkeys.value = passkeys.value.filter(p => p.id !== id)
+  } catch (err) {
+    passkeyMsg.value = err.message || 'Failed to remove passkey.'
+  } finally {
+    deletingPasskeyId.value = null
+  }
+}
 
 async function loadDisplayName() {
   const profile = await boardStore.loadMyProfile().catch(() => null)
@@ -418,6 +486,7 @@ onMounted(async () => {
   document.addEventListener('click', closeIconPicker)
   loadPending()
   loadDisplayName()
+  loadPasskeys()
 })
 
 onUnmounted(() => {

@@ -61,8 +61,24 @@ export function isPasskeySupported() {
   return !!(window.PublicKeyCredential && navigator.credentials?.create && navigator.credentials?.get)
 }
 
+function getDeviceLabel() {
+  const ua = navigator.userAgent
+  let device = /iPhone/.test(ua) ? 'iPhone'
+    : /iPad/.test(ua) ? 'iPad'
+    : /Android/.test(ua) ? 'Android'
+    : /Win/.test(navigator.platform || '') ? 'Windows'
+    : /Mac/.test(navigator.platform || '') ? 'Mac'
+    : 'Unknown device'
+  const browser = /Edg\//.test(ua) ? 'Edge'
+    : /Chrome\//.test(ua) ? 'Chrome'
+    : /Safari\//.test(ua) && !/Chrome/.test(ua) ? 'Safari'
+    : /Firefox\//.test(ua) ? 'Firefox'
+    : ''
+  return browser ? `${device} · ${browser}` : device
+}
+
 // Try to sign in with a discoverable passkey (no email required).
-// Returns true on success, null if no passkey available or cancelled.
+// Returns true on success, null if no passkey available or cancelled, throws on server error.
 export async function tryDiscoverableAuth() {
   if (!isPasskeySupported()) return null
 
@@ -79,11 +95,13 @@ export async function tryDiscoverableAuth() {
       },
     })
   } catch (err) {
-    if (err.name === 'NotAllowedError' || err.name === 'AbortError') return null
+    // User cancelled or no passkey available — not an error
+    if (err.name === 'NotAllowedError' || err.name === 'AbortError' || err.name === 'NotSupportedError') return null
     return null
   }
   if (!cred) return null
 
+  // Server errors propagate so the UI can show them
   const { access_token, refresh_token } = await callFn('passkey-auth-finish', {
     challengeId,
     credential: encodeAssertionCredential(cred),
@@ -158,7 +176,6 @@ export async function registerPasskey() {
         id: b64urlToBuffer(c.id),
       })),
     }
-    console.log('[passkey] register options.user:', JSON.stringify(options.user))
     cred = await navigator.credentials.create({ publicKey: publicKeyOptions })
   } catch (err) {
     if (err.name === 'NotAllowedError') throw new Error('cancelled')
@@ -168,8 +185,22 @@ export async function registerPasskey() {
 
   await callFn(
     'passkey-register-finish',
-    { challengeId, credential: encodeAttestationCredential(cred) },
+    { challengeId, credential: encodeAttestationCredential(cred), deviceLabel: getDeviceLabel() },
     session.access_token,
   )
   return true
+}
+
+export async function listPasskeys() {
+  const { data } = await supabase
+    .from('passkeys')
+    .select('id, device_label, created_at, last_used_at')
+    .order('created_at', { ascending: true })
+  return data || []
+}
+
+export async function deletePasskey(id) {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) throw new Error('Not authenticated')
+  await callFn('passkey-delete', { passkeyId: id }, session.access_token)
 }

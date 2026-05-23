@@ -40,7 +40,7 @@ Deno.serve(async (req) => {
     { auth: { autoRefreshToken: false, persistSession: false } },
   )
 
-  const { challengeId, credential } = await req.json()
+  const { challengeId, credential, deviceLabel } = await req.json()
   if (!challengeId || !credential) return json({ error: 'Missing required fields' }, 400)
 
   // Load challenge
@@ -58,7 +58,8 @@ Deno.serve(async (req) => {
   }
 
   const rpId = Deno.env.get('WEBAUTHN_RP_ID') || 'localhost'
-  const origins = (Deno.env.get('WEBAUTHN_RP_ORIGIN') || 'http://localhost:3000')
+  const defaultOrigin = rpId === 'localhost' ? 'http://localhost:3000' : `https://${rpId}`
+  const origins = (Deno.env.get('WEBAUTHN_RP_ORIGIN') || defaultOrigin)
     .split(',')
     .map((o: string) => o.trim())
 
@@ -88,6 +89,7 @@ Deno.serve(async (req) => {
     public_key: toBase64url(cred.publicKey),
     aaguid: verification.registrationInfo.aaguid || '',
     sign_count: cred.counter,
+    device_label: (deviceLabel || '').slice(0, 120),
   })
 
   if (insertError) {

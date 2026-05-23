@@ -56,7 +56,8 @@ Deno.serve(async (req) => {
   if (!passkey) return json({ error: 'Passkey not found' }, 401)
 
   const rpId = Deno.env.get('WEBAUTHN_RP_ID') || 'localhost'
-  const origins = (Deno.env.get('WEBAUTHN_RP_ORIGIN') || 'http://localhost:3000')
+  const defaultOrigin = rpId === 'localhost' ? 'http://localhost:3000' : `https://${rpId}`
+  const origins = (Deno.env.get('WEBAUTHN_RP_ORIGIN') || defaultOrigin)
     .split(',')
     .map((o: string) => o.trim())
 

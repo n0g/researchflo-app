@@ -80,8 +80,9 @@ onMounted(async () => {
   try {
     const result = await tryDiscoverableAuth()
     if (!result) phase.value = 'form'
-  } catch {
+  } catch (err) {
     phase.value = 'form'
+    errorMsg.value = err.message || 'Passkey sign-in failed.'
   }
 
   await nextTick()
