@@ -29,6 +29,16 @@ export const useAuthStore = defineStore('auth', () => {
       session.value = s
       user.value = s?.user ?? null
     })
+
+    // Re-sync session when app comes back to foreground (handles iOS PWA background kill)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        supabase.auth.getSession().then(({ data }) => {
+          session.value = data.session
+          user.value = data.session?.user ?? null
+        })
+      }
+    })
   }
 
   async function signIn(email, password) {
