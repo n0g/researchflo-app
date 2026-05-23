@@ -8,10 +8,15 @@ export const useAuthStore = defineStore('auth', () => {
   const loading = ref(true)
 
   async function init() {
-    const { data } = await supabase.auth.getSession()
-    session.value = data.session
-    user.value = data.session?.user ?? null
-    loading.value = false
+    try {
+      const { data } = await supabase.auth.getSession()
+      session.value = data.session
+      user.value = data.session?.user ?? null
+    } catch (e) {
+      console.error('Auth init failed:', e)
+    } finally {
+      loading.value = false
+    }
 
     supabase.auth.onAuthStateChange((_, s) => {
       session.value = s
