@@ -421,13 +421,13 @@ entrypoint = "./functions/passkey-auth-finish/index.ts"
 
 [functions.passkey-register-start]
 enabled = true
-verify_jwt = true
+verify_jwt = false
 import_map = "./functions/passkey-register-start/deno.json"
 entrypoint = "./functions/passkey-register-start/index.ts"
 
 [functions.passkey-register-finish]
 enabled = true
-verify_jwt = true
+verify_jwt = false
 import_map = "./functions/passkey-register-finish/deno.json"
 entrypoint = "./functions/passkey-register-finish/index.ts"
 
