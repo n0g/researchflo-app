@@ -1,8 +1,5 @@
 <template>
-  <!-- Show nothing while resolving auth session -->
-  <div v-if="authStore.loading" class="app-boot" />
-
-  <f7-app v-else v-bind="f7params">
+  <f7-app v-bind="f7params">
     <!-- Not signed in to Supabase -->
     <f7-view v-if="!authStore.user" main url="/login/" />
 
@@ -20,6 +17,7 @@
     </template>
   </f7-app>
 </template>
+
 
 <script setup>
 import { ref, watch, onMounted, nextTick } from 'vue'

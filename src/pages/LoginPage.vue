@@ -1,6 +1,6 @@
 <template>
   <f7-page name="login" class="login-page" no-navbar>
-    <div class="login-screen">
+    <div class="login-wrap">
       <div class="login-box">
         <div class="login-logo">
           <i class="ph ph-strategy login-logo-icon" aria-hidden="true"></i>

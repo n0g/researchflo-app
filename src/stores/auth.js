@@ -2,11 +2,20 @@ import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import { supabase } from '../lib/supabase.js'
 
-export const useAuthStore = defineStore('auth', () => {
-  const user = ref(null)
-  const session = ref(null)
-  const loading = ref(true)
+function readStoredSession() {
+  try {
+    const projectRef = import.meta.env.VITE_SUPABASE_URL.split('//')[1].split('.')[0]
+    const raw = localStorage.getItem(`sb-${projectRef}-auth-token`)
+    return raw ? JSON.parse(raw) : null
+  } catch { return null }
+}
 
+export const useAuthStore = defineStore('auth', () => {
+  const stored = readStoredSession()
+  const user = ref(stored?.user ?? null)
+  const session = ref(stored ?? null)
+
+  // Validate/refresh session in the background after mount
   async function init() {
     try {
       const { data } = await supabase.auth.getSession()
@@ -14,8 +23,6 @@ export const useAuthStore = defineStore('auth', () => {
       user.value = data.session?.user ?? null
     } catch (e) {
       console.error('Auth init failed:', e)
-    } finally {
-      loading.value = false
     }
 
     supabase.auth.onAuthStateChange((_, s) => {
@@ -33,5 +40,5 @@ export const useAuthStore = defineStore('auth', () => {
     await supabase.auth.signOut()
   }
 
-  return { user, session, loading, init, signIn, signOut }
+  return { user, session, init, signIn, signOut }
 })
