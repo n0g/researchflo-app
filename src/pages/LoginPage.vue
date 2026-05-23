@@ -72,6 +72,15 @@ const emailEl = ref(null)
 const hasInvite = computed(() => !!localStorage.getItem('pending_invite_token'))
 
 onMounted(async () => {
+  // Skip auto-try when a magic link is being processed — let Supabase establish the session first
+  if (sessionStorage.getItem('magic_link_pending')) {
+    sessionStorage.removeItem('magic_link_pending')
+    phase.value = 'form'
+    await nextTick()
+    emailEl.value?.focus()
+    return
+  }
+
   if (!isPasskeySupported()) {
     phase.value = 'form'
     return
@@ -80,7 +89,6 @@ onMounted(async () => {
   try {
     const result = await tryDiscoverableAuth()
     if (!result) phase.value = 'form'
-    // If result is true, onAuthStateChange in auth.js will update user → App.vue switches views
   } catch {
     phase.value = 'form'
   }
