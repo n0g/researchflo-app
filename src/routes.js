@@ -1,4 +1,3 @@
-import TokenPage from './pages/TokenPage.vue'
 import LoginPage from './pages/LoginPage.vue'
 import BoardPage from './pages/BoardPage.vue'
 import ReviewsPage from './pages/ReviewsPage.vue'
@@ -14,7 +13,6 @@ import SchedulePlacePage from './pages/SchedulePlacePage.vue'
 export default [
   { path: '/', component: LoginPage },
   { path: '/login/', component: LoginPage },
-  { path: '/token/', component: TokenPage },
   { path: '/board/', component: BoardPage },
   { path: '/reviews/', component: ReviewsPage },
   { path: '/hotcrp/', component: HotCRPPage },

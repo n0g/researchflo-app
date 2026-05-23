@@ -1,30 +1,17 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { api, apiAll, syncCommands } from '../lib/todoist.js'
+import { supabase } from '../lib/supabase.js'
 import { useCalendarStore } from './calendar.js'
-import {
-  DEFAULT_STAGES,
-  VENUES,
-  getProjectStage,
-  getProjectMeta,
-  getProjectTasks,
-  getProjectDeadline,
-  parseLocalDate,
-  stripPersonPrefix,
-  isPersonLabel,
-} from '../lib/helpers.js'
+import { DEFAULT_STAGES, parseLocalDate } from '../lib/helpers.js'
 
 export const useBoardStore = defineStore('board', () => {
-  const token = ref(localStorage.getItem('rb_token'))
+  // ── State ──────────────────────────────────────────────────────────────────
+  const token = ref('supabase')  // Always truthy; Todoist token no longer needed
   const stages = ref(JSON.parse(localStorage.getItem('rb_stages') || 'null'))
   const projects = ref([])
   const tasks = ref([])
-  const excludedSectionIds = ref(new Set())
-  const deadlineSectionIds = ref(new Set())
-  const statusSectionIds = ref(new Set())
-  const deadlineSectionByProject = ref(new Map())
-  const summarySectionByProject = ref(new Map())
-  const submissionSectionByProject = ref(new Map())
+  const excludedSectionIds = ref(new Set())  // Empty — no sections in Supabase schema
+  const deadlineSectionIds = ref(new Set())  // Empty — deadline is a project column
   const lastUpdated = ref(null)
   const loading = ref(false)
   const setupStatus = ref('')
@@ -32,45 +19,68 @@ export const useBoardStore = defineStore('board', () => {
   const triageTaskIds = ref([])
   const triageCurrentId = ref(null)
   const pendingScheduleTask = ref(null)
-  const labels = ref([])
-  const activeFilter = ref(null) // { type: 'person'|'venue', value: string } | null
+  const labels = ref([])  // No Todoist labels; kept for API compat (always empty)
+  const activeFilter = ref(null)
 
-  const stageLabels = computed(() => (stages.value || []).map(s => s.label))
+  // Internal map of stage UUID → { name, icon } built during loadData()
+  const _stageById = ref(new Map())
 
-  const displayProjects = computed(() => {
-    const root = projects.value.find(p => !p.parent_id && p.name === 'Research')
-    return root ? projects.value.filter(p => p.parent_id === root.id) : projects.value
-  })
-
-  const inboxProjectId = computed(() =>
-    projects.value.find(p => p.is_inbox_project || p.inbox_project || (!p.parent_id && p.name === 'Inbox'))?.id ?? null
-  )
+  // ── Computed ───────────────────────────────────────────────────────────────
+  const stageLabels = computed(() => (stages.value || []).map(s => s.id).filter(Boolean))
+  const displayProjects = computed(() => projects.value)
+  const inboxProjectId = computed(() => null)
 
   const allCollaborators = computed(() => {
-    const stageSet = new Set(stageLabels.value)
-    const venueSet = new Set(VENUES)
     const people = new Set()
-    displayProjects.value.forEach(p => {
-      const stage = getProjectStage(tasks.value, stageLabels.value, p.id)
-      if (stage) {
-        (stage.task.labels || [])
-          .filter(l => !stageSet.has(l) && !venueSet.has(l.toLowerCase()) && isPersonLabel(l))
-          .forEach(l => people.add(stripPersonPrefix(l)))
-      }
-    })
+    displayProjects.value.forEach(p => (p.collaborators || []).forEach(c => people.add(c)))
     return [...people].sort()
   })
 
   const allVenues = computed(() => {
     const venues = new Set()
-    displayProjects.value.forEach(p => {
-      const sectionId = deadlineSectionByProject.value.get(p.id)
-      const dt = sectionId ? tasks.value.find(t => t.project_id === p.id && t.section_id === sectionId && !t.is_completed) : null
-      if (dt?.content) venues.add(dt.content)
-    })
+    displayProjects.value.forEach(p => { if (p.venue) venues.add(p.venue) })
     return [...venues].sort()
   })
 
+  const focusProjectIds = computed(() => {
+    const ids = new Set()
+    for (const p of displayProjects.value) {
+      if ((p.energy || 0) > 0) ids.add(p.id)
+    }
+    return ids
+  })
+
+  // ── Internal helpers ───────────────────────────────────────────────────────
+
+  // Reconstruct the in-memory description string from clean DB description + managed columns
+  function _buildTaskDescription(task) {
+    const base = (task.description || '').trim()
+    const gcalLine = task.caldav_event_uid
+      ? `📅 GCal: ${task.caldav_event_uid}|${task.caldav_calendar_id ?? ''}`
+      : null
+    let scheduledLine = null
+    if (task.scheduled_at) {
+      const d = new Date(task.scheduled_at)
+      const readable =
+        d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) +
+        ' at ' +
+        d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+      scheduledLine = `📅 Scheduled: ${readable} (${task.scheduled_at})`
+    }
+    return [base, gcalLine, scheduledLine].filter(Boolean).join('\n')
+  }
+
+  // Normalize a raw Supabase task row to match the shape components expect
+  function _transformTask(t) {
+    return {
+      ...t,
+      due: t.due_date ? { date: t.due_date } : null,
+      order: t.sort_order ?? 0,
+      description: _buildTaskDescription(t),
+    }
+  }
+
+  // ── Filter ─────────────────────────────────────────────────────────────────
   function setFilter(type, value) {
     if (activeFilter.value?.type === type && activeFilter.value?.value === value) {
       activeFilter.value = null
@@ -79,78 +89,48 @@ export const useBoardStore = defineStore('board', () => {
     }
   }
 
+  // ── Stage display config (not DB stage records) ────────────────────────────
   function initStages() {
     if (!stages.value) {
       stages.value = DEFAULT_STAGES
       localStorage.setItem('rb_stages', JSON.stringify(DEFAULT_STAGES))
-    } else {
-      // Migrate: ensure Revision comes before Awaiting Reviews
-      const ri = stages.value.findIndex(s => s.label === 'stage::revision')
-      const ai = stages.value.findIndex(s => s.label === 'stage::under-submission')
-      if (ri !== -1 && ai !== -1 && ri > ai) {
-        stages.value.splice(ai, 0, stages.value.splice(ri, 1)[0])
-        localStorage.setItem('rb_stages', JSON.stringify(stages.value))
+    }
+  }
+
+  async function saveStages(newStages) {
+    let { data: { user } } = await supabase.auth.getUser()
+    const result = []
+    for (let i = 0; i < newStages.length; i++) {
+      const s = newStages[i]
+      if (s.id) {
+        await supabase.from('stages').update({ name: s.name, icon: s.icon || 'kanban', sort_order: i }).eq('id', s.id)
+        result.push({ id: s.id, name: s.name, icon: s.icon || 'kanban', sort_order: i })
+      } else {
+        const { data: inserted } = await supabase.from('stages').insert({
+          owner_id: user?.id,
+          name: s.name,
+          icon: s.icon || 'kanban',
+          sort_order: i,
+        }).select().single()
+        if (inserted) result.push({ id: inserted.id, name: s.name, icon: s.icon || 'kanban', sort_order: i })
       }
     }
+    stages.value = result
+    localStorage.setItem('rb_stages', JSON.stringify(result))
+    // Rebuild map
+    const m = new Map()
+    for (const s of result) m.set(s.id, s)
+    _stageById.value = m
   }
 
-  async function runSetup(tokenVal) {
-    setupStatus.value = 'Checking Todoist structure…'
-    const allProjects = await apiAll(tokenVal, '/projects')
+  // ── Auth ───────────────────────────────────────────────────────────────────
+  async function saveToken() {}  // No-op; auth handled by Supabase
 
-    let research = allProjects.find(p => !p.parent_id && p.name === 'Research')
-    if (!research) {
-      setupStatus.value = 'Creating Research project…'
-      research = await api(tokenVal, '/projects', 'POST', { name: 'Research' })
-    }
-
-    const hasSettings = allProjects.some(p => !p.parent_id && p.name === 'Settings')
-    if (!hasSettings) {
-      setupStatus.value = 'Creating Settings project…'
-      await api(tokenVal, '/projects', 'POST', { name: 'Settings' })
-    }
-
-    const subProjects = allProjects.filter(p => p.parent_id === research.id)
-    if (subProjects.length) {
-      setupStatus.value = 'Checking project sections…'
-      const allSections = await apiAll(tokenVal, '/sections')
-      const REQUIRED = ['📌 Current Status', '📌 Deadlines', '📌 Summary', '📌 Submission']
-      await Promise.all(subProjects.map(async project => {
-        const existing = new Set(allSections.filter(s => s.project_id === project.id).map(s => s.name))
-        await Promise.all(
-          REQUIRED
-            .filter(name => !existing.has(name))
-            .map(name => api(tokenVal, '/sections', 'POST', { name, project_id: project.id }))
-        )
-      }))
-    }
-
-    setupStatus.value = ''
+  async function resetToken() {
+    await supabase.auth.signOut()
   }
 
-  async function saveToken(val) {
-    await api(val, '/projects')
-    await runSetup(val)
-    token.value = val
-    localStorage.setItem('rb_token', val)
-    if (!stages.value) {
-      stages.value = DEFAULT_STAGES
-      localStorage.setItem('rb_stages', JSON.stringify(DEFAULT_STAGES))
-    }
-  }
-
-  function saveStages(newStages) {
-    stages.value = newStages
-    localStorage.setItem('rb_stages', JSON.stringify(newStages))
-  }
-
-  function resetToken() {
-    localStorage.removeItem('rb_token')
-    localStorage.removeItem('rb_stages')
-    token.value = null
-    stages.value = null
-  }
-
+  // ── Data loading ───────────────────────────────────────────────────────────
   async function loadIfStale() {
     const TEN_MIN = 10 * 60 * 1000
     if (!lastUpdated.value || Date.now() - lastUpdated.value.getTime() > TEN_MIN) {
@@ -161,349 +141,339 @@ export const useBoardStore = defineStore('board', () => {
   async function loadData() {
     loading.value = true
     try {
-      const [projectsData, tasksData, sectionsData] = await Promise.all([
-        apiAll(token.value, '/projects'),
-        apiAll(token.value, '/tasks'),
-        apiAll(token.value, '/sections'),
+      const [{ data: projectsData }, { data: tasksData }, { data: stagesData }] = await Promise.all([
+        supabase.from('projects').select('*').order('name'),
+        supabase.from('tasks').select('*').eq('is_completed', false),
+        supabase.from('stages').select('*'),
       ])
-      projects.value = projectsData
-      tasks.value = tasksData
-      const EXCLUDED = new Set(['📌 Current Status', '📌 Deadlines', '📌 Summary', '📌 Submission'])
-      excludedSectionIds.value = new Set(sectionsData.filter(s => EXCLUDED.has(s.name)).map(s => s.id))
-      deadlineSectionIds.value = new Set(sectionsData.filter(s => s.name === '📌 Deadlines').map(s => s.id))
-      statusSectionIds.value = new Set(sectionsData.filter(s => s.name === '📌 Current Status').map(s => s.id))
-      const deadlineMap = new Map()
-      sectionsData.filter(s => s.name === '📌 Deadlines').forEach(s => deadlineMap.set(s.project_id, s.id))
-      deadlineSectionByProject.value = deadlineMap
-      const summaryMap = new Map()
-      sectionsData.filter(s => s.name === '📌 Summary').forEach(s => summaryMap.set(s.project_id, s.id))
-      summarySectionByProject.value = summaryMap
-      const submissionMap = new Map()
-      sectionsData.filter(s => s.name === '📌 Submission').forEach(s => submissionMap.set(s.project_id, s.id))
-      submissionSectionByProject.value = submissionMap
+
+      projects.value = projectsData || []
+      tasks.value = (tasksData || []).map(_transformTask)
+
+      // Build internal stage UUID → { name, icon } map
+      const byId = new Map()
+      for (const s of (stagesData || [])) byId.set(s.id, { name: s.name, icon: s.icon || 'kanban' })
+      _stageById.value = byId
+
+      // Seed display stages from DB if no user config exists yet
+      if (!stages.value && stagesData?.length) {
+        const derived = stagesData
+          .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+          .map(s => ({ id: s.id, name: s.name, icon: s.icon || 'kanban' }))
+        stages.value = derived
+        localStorage.setItem('rb_stages', JSON.stringify(derived))
+      }
+
       lastUpdated.value = new Date()
     } finally {
       loading.value = false
     }
   }
 
-  const FOCUS_LABEL = 'sprint::focus'
-  const ENERGY_LOW  = 'sprint::energy-1'
-  const ENERGY_HIGH = 'sprint::energy-2'
-
-  function projectEnergy(projectId) {
-    const stage = getProjectStage(tasks.value, stageLabels.value, projectId)
-    if (!stage) return 0
-    const labels = stage.task.labels || []
-    if (labels.includes(ENERGY_HIGH)) return 2
-    if (labels.includes(ENERGY_LOW))  return 1
-    return 0
-  }
-
-  const focusProjectIds = computed(() => {
-    const ids = new Set()
-    for (const p of displayProjects.value) {
-      if (projectEnergy(p.id) > 0) ids.add(p.id)
-    }
-    return ids
-  })
-
-  async function cycleEnergy(projectId) {
-    const stage = getProjectStage(tasks.value, stageLabels.value, projectId)
-    if (!stage) return
-    const task = stage.task
-    const labels = task.labels || []
-    const current = labels.includes(ENERGY_HIGH) ? 2 : labels.includes(ENERGY_LOW) ? 1 : 0
-    const next = (current + 1) % 3
-    const newLabels = labels.filter(l => l !== ENERGY_LOW && l !== ENERGY_HIGH && l !== FOCUS_LABEL)
-    if (next === 1) newLabels.push(ENERGY_LOW)
-    if (next === 2) newLabels.push(ENERGY_HIGH)
-    task.labels = newLabels
-    await api(token.value, `/tasks/${task.id}`, 'POST', { labels: newLabels })
-  }
-
+  // ── Project queries ────────────────────────────────────────────────────────
   function projectStage(projectId) {
-    return getProjectStage(tasks.value, stageLabels.value, projectId)
+    const project = projects.value.find(p => p.id === projectId)
+    if (!project?.stage_id) return null
+    const info = _stageById.value.get(project.stage_id)
+    if (!info) return null
+    return { id: project.stage_id, name: info.name, icon: info.icon }
   }
 
   function projectStatusTask(projectId) {
-    return tasks.value.find(t => t.project_id === projectId && statusSectionIds.value.has(t.section_id) && !t.is_completed) ?? null
+    const project = projects.value.find(p => p.id === projectId)
+    if (!project) return null
+    return { id: projectId, content: project.status_text || '', labels: [] }
   }
 
   function projectDeadlineTaskBase(projectId) {
-    const sectionId = deadlineSectionByProject.value.get(projectId)
-    if (!sectionId) return null
-    return tasks.value.find(t => t.project_id === projectId && t.section_id === sectionId && !t.is_completed) ?? null
-  }
-
-  function projectMeta(projectId) {
-    const meta = getProjectMeta(tasks.value, projectId)
-    const dt = projectDeadlineTaskBase(projectId)
-    if (dt) meta.venue = dt.content
-    return meta
-  }
-
-  function projectTasks(projectId) {
-    return getProjectTasks(tasks.value, stageLabels.value, excludedSectionIds.value, projectId)
-  }
-
-  function projectDeadline(projectId) {
-    return getProjectDeadline(tasks.value, deadlineSectionIds.value, projectId)
-  }
-
-  async function moveStage(projectId, oldTaskId, oldLabel, newLabel) {
-    if (oldLabel === newLabel) return
-    const taskId = oldTaskId || projectStatusTask(projectId)?.id
-    if (!taskId) throw new Error('No stage task found for this project.')
-    const task = tasks.value.find(t => t.id === taskId)
-    if (task) {
-      const newLabels = (task.labels || []).filter(l => l !== oldLabel).concat(newLabel)
-      await api(token.value, `/tasks/${taskId}`, 'POST', { labels: newLabels })
-      task.labels = newLabels
+    const project = projects.value.find(p => p.id === projectId)
+    if (!project) return null
+    return {
+      id: projectId,
+      content: project.venue || '',
+      due: project.deadline ? { date: project.deadline } : null,
     }
   }
 
+  function projectDeadlineTaskObj(projectId) {
+    const project = projects.value.find(p => p.id === projectId)
+    if (!project?.deadline) return null
+    return {
+      id: projectId,
+      content: project.venue || project.name,
+      due: { date: project.deadline },
+    }
+  }
+
+  function projectMeta(projectId) {
+    const project = projects.value.find(p => p.id === projectId)
+    return { venue: project?.venue || null, author: null }
+  }
+
+  function projectTasks(projectId) {
+    return tasks.value
+      .filter(t => t.project_id === projectId && !t.is_completed)
+      .sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
+  }
+
+  function projectDeadline(projectId) {
+    const project = projects.value.find(p => p.id === projectId)
+    if (!project?.deadline) return null
+    return parseLocalDate(project.deadline)
+  }
+
+  function projectSummaryTask(projectId) {
+    const project = projects.value.find(p => p.id === projectId)
+    if (!project) return null
+    return { id: projectId, content: project.summary || '' }
+  }
+
+  function projectSubmissionTask(projectId) {
+    const project = projects.value.find(p => p.id === projectId)
+    if (!project) return null
+    return { id: projectId, content: project.submission_url || '' }
+  }
+
+  function projectEnergy(projectId) {
+    return projects.value.find(p => p.id === projectId)?.energy || 0
+  }
+
+  // ── Project mutations ──────────────────────────────────────────────────────
+  async function moveStage(projectId, _oldTaskId, _oldId, newStageId) {
+    const { error } = await supabase.from('projects').update({ stage_id: newStageId || null }).eq('id', projectId)
+    if (error) throw new Error(error.message)
+    const project = projects.value.find(p => p.id === projectId)
+    if (project) project.stage_id = newStageId || null
+  }
+
+  // projectId passed as taskId — pseudo-tasks have id === projectId
+  async function updateStatusText(projectId, content) {
+    const { error } = await supabase.from('projects').update({ status_text: content }).eq('id', projectId)
+    if (error) throw new Error(error.message)
+    const project = projects.value.find(p => p.id === projectId)
+    if (project) project.status_text = content
+  }
+
+  async function updateVenue(projectId, name) {
+    const { error } = await supabase.from('projects').update({ venue: name || '' }).eq('id', projectId)
+    if (error) throw new Error(error.message)
+    const project = projects.value.find(p => p.id === projectId)
+    if (project) project.venue = name || ''
+  }
+
+  async function setDeadlineDate(projectId, dateVal) {
+    const { error } = await supabase.from('projects').update({ deadline: dateVal || null }).eq('id', projectId)
+    if (error) throw new Error(error.message)
+    const project = projects.value.find(p => p.id === projectId)
+    if (project) project.deadline = dateVal || null
+  }
+
+  async function updateSummary(projectId, text) {
+    const { error } = await supabase.from('projects').update({ summary: text || '' }).eq('id', projectId)
+    if (error) throw new Error(error.message)
+    const project = projects.value.find(p => p.id === projectId)
+    if (project) project.summary = text || ''
+  }
+
+  async function updateSubmissionUrl(projectId, url) {
+    const { error } = await supabase.from('projects').update({ submission_url: url || '' }).eq('id', projectId)
+    if (error) throw new Error(error.message)
+    const project = projects.value.find(p => p.id === projectId)
+    if (project) project.submission_url = url || ''
+  }
+
+  async function addCollaborator(projectId, name) {
+    const project = projects.value.find(p => p.id === projectId)
+    if (!project) return
+    const newCollabs = [...new Set([...(project.collaborators || []), name])]
+    const { error } = await supabase.from('projects').update({ collaborators: newCollabs }).eq('id', projectId)
+    if (error) throw new Error(error.message)
+    project.collaborators = newCollabs
+  }
+
+  async function removeCollaborator(projectId, name) {
+    const project = projects.value.find(p => p.id === projectId)
+    if (!project) return
+    const newCollabs = (project.collaborators || []).filter(c => c !== name)
+    const { error } = await supabase.from('projects').update({ collaborators: newCollabs }).eq('id', projectId)
+    if (error) throw new Error(error.message)
+    project.collaborators = newCollabs
+  }
+
+  async function cycleEnergy(projectId) {
+    const project = projects.value.find(p => p.id === projectId)
+    if (!project) return
+    const next = ((project.energy || 0) + 1) % 3
+    const { error } = await supabase.from('projects').update({ energy: next }).eq('id', projectId)
+    if (error) throw new Error(error.message)
+    project.energy = next
+  }
+
+  async function renameProject(projectId, name) {
+    const { error } = await supabase.from('projects').update({ name }).eq('id', projectId)
+    if (error) throw new Error(error.message)
+    const project = projects.value.find(p => p.id === projectId)
+    if (project) project.name = name
+  }
+
+  async function deleteProject(projectId) {
+    const { error } = await supabase.from('projects').delete().eq('id', projectId)
+    if (error) throw new Error(error.message)
+    projects.value = projects.value.filter(p => p.id !== projectId)
+    tasks.value = tasks.value.filter(t => t.project_id !== projectId)
+  }
+
+  async function createProject(name) {
+    const { data: { user } } = await supabase.auth.getUser()
+    const defaultStage = stages.value?.[0]
+    const defaultStageId = defaultStage?.id ?? null
+
+    const { data: project, error } = await supabase.from('projects').insert({
+      name,
+      owner_id: user.id,
+      stage_id: defaultStageId,
+    }).select().single()
+    if (error) throw new Error(error.message)
+
+    await supabase.from('project_members').insert({ project_id: project.id, user_id: user.id, role: 'owner' })
+    projects.value.push(project)
+    return project
+  }
+
+  // ── Task mutations ─────────────────────────────────────────────────────────
   async function completeTask(taskId) {
-    await api(token.value, `/tasks/${taskId}/close`, 'POST')
+    const { error } = await supabase.from('tasks')
+      .update({ is_completed: true, completed_at: new Date().toISOString() })
+      .eq('id', taskId)
+    if (error) throw new Error(error.message)
     tasks.value = tasks.value.filter(t => t.id !== taskId)
   }
 
   async function deleteTask(taskId) {
     const task = tasks.value.find(t => t.id === taskId)
-    if (task) {
-      const gcalLine = (task.description || '').split('\n').find(l => l.startsWith('📅 GCal:'))
-      if (gcalLine) {
-        const parts = gcalLine.slice('📅 GCal: '.length).split('|')
-        if (parts.length === 2) {
-          const { useCalendarStore } = await import('./calendar.js')
-          useCalendarStore().unlinkTaskFromEvent(parts[0], parts[1]).catch(console.error)
-        }
-      }
+    if (task?.caldav_event_uid) {
+      useCalendarStore().unlinkTaskFromEvent(task.caldav_event_uid, task.caldav_calendar_id).catch(console.error)
     }
-    await api(token.value, `/tasks/${taskId}`, 'DELETE')
+    const { error } = await supabase.from('tasks').delete().eq('id', taskId)
+    if (error) throw new Error(error.message)
     tasks.value = tasks.value.filter(t => t.id !== taskId)
   }
 
   async function reorderTasks(orderedTaskIds) {
     orderedTaskIds.forEach((id, idx) => {
       const task = tasks.value.find(t => t.id === id)
-      if (task) task.order = idx + 1
+      if (task) { task.sort_order = idx + 1; task.order = idx + 1 }
     })
-    await syncCommands(token.value, [{
-      type: 'item_reorder',
-      uuid: crypto.randomUUID(),
-      args: { items: orderedTaskIds.map((id, idx) => ({ id, child_order: idx + 1 })) },
-    }])
+    await Promise.all(
+      orderedTaskIds.map((id, idx) =>
+        supabase.from('tasks').update({ sort_order: idx + 1 }).eq('id', id)
+      )
+    )
   }
 
   async function quickAddTask(content, projectId) {
-    const task = await api(token.value, '/tasks', 'POST', { content, project_id: projectId })
-    tasks.value.push(task)
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: task, error } = await supabase.from('tasks')
+      .insert({ content, project_id: projectId, created_by: user.id })
+      .select().single()
+    if (error) throw new Error(error.message)
+    tasks.value.push(_transformTask(task))
   }
 
   async function addInboxTask(content, description) {
-    const task = await api(token.value, '/tasks', 'POST', { content })
-    if (description) {
-      await api(token.value, `/tasks/${task.id}`, 'POST', { description })
-      task.description = description
-    }
-    tasks.value.push(task)
-    return task
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: task, error } = await supabase.from('tasks')
+      .insert({ content, description: description || '', created_by: user.id, project_id: null })
+      .select().single()
+    if (error) throw new Error(error.message)
+    const t = _transformTask(task)
+    tasks.value.push(t)
+    return t
   }
 
   async function assignTaskToProject(taskId, projectId) {
-    await api(token.value, `/tasks/${taskId}`, 'POST', { project_id: projectId })
+    const { error } = await supabase.from('tasks').update({ project_id: projectId }).eq('id', taskId)
+    if (error) throw new Error(error.message)
     const task = tasks.value.find(t => t.id === taskId)
     if (task) task.project_id = projectId
   }
 
   async function updateTaskDue(taskId, dateVal) {
-    const body = dateVal ? { due_date: dateVal } : { due_string: 'no due date' }
-    await api(token.value, `/tasks/${taskId}`, 'POST', body)
+    const { error } = await supabase.from('tasks').update({ due_date: dateVal || null }).eq('id', taskId)
+    if (error) throw new Error(error.message)
     const task = tasks.value.find(t => t.id === taskId)
     if (task) task.due = dateVal ? { date: dateVal } : null
   }
 
   async function saveGCalEvent(taskId, eventId, calId) {
+    const { error } = await supabase.from('tasks')
+      .update({ caldav_event_uid: eventId, caldav_calendar_id: calId })
+      .eq('id', taskId)
+    if (error) throw new Error(error.message)
     const task = tasks.value.find(t => t.id === taskId)
-    if (!task) return
-    const gcalLine = `📅 GCal: ${eventId}|${calId}`
-    const filtered = (task.description || '').split('\n').filter(l => !l.startsWith('📅 GCal:'))
-    const trimmed = filtered.join('\n').trimEnd()
-    const newDesc = trimmed ? `${trimmed}\n${gcalLine}` : gcalLine
-    await api(token.value, `/tasks/${taskId}`, 'POST', { description: newDesc })
-    task.description = newDesc
+    if (task) {
+      task.caldav_event_uid = eventId
+      task.caldav_calendar_id = calId
+      task.description = _buildTaskDescription(task)
+    }
   }
 
   async function saveScheduledTime(taskId, isoDatetime) {
     const task = tasks.value.find(t => t.id === taskId)
     if (!task) return
-    const d = new Date(isoDatetime)
-    const readable = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) +
-      ' at ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-    const scheduledLine = `📅 Scheduled: ${readable} (${isoDatetime})`
-    const filtered = (task.description || '').split('\n').filter(l => !l.startsWith('📅 Scheduled:'))
-    const trimmed = filtered.join('\n').trimEnd()
-    const newDesc = trimmed ? `${trimmed}\n${scheduledLine}` : scheduledLine
-    const labels = [...(task.labels || [])]
-    if (!labels.includes('scheduled')) labels.push('scheduled')
-    await api(token.value, `/tasks/${taskId}`, 'POST', { description: newDesc, labels })
-    task.description = newDesc
-    task.labels = labels
+    const newLabels = [...(task.labels || [])]
+    if (!newLabels.includes('scheduled')) newLabels.push('scheduled')
+    const { error } = await supabase.from('tasks')
+      .update({ scheduled_at: isoDatetime, labels: newLabels })
+      .eq('id', taskId)
+    if (error) throw new Error(error.message)
+    task.scheduled_at = isoDatetime
+    task.labels = newLabels
+    task.description = _buildTaskDescription(task)
   }
 
   async function clearScheduledTime(taskId) {
     const task = tasks.value.find(t => t.id === taskId)
     if (!task) return
-    const filtered = (task.description || '').split('\n')
-      .filter(l => !l.startsWith('📅 Scheduled:') && !l.startsWith('📅 GCal:'))
-    const newDesc = filtered.join('\n').trim()
     const newLabels = (task.labels || []).filter(l => l !== 'scheduled')
-    await api(token.value, `/tasks/${taskId}`, 'POST', { description: newDesc, labels: newLabels })
-    task.description = newDesc
+    const { error } = await supabase.from('tasks')
+      .update({ scheduled_at: null, caldav_event_uid: null, caldav_calendar_id: null, labels: newLabels })
+      .eq('id', taskId)
+    if (error) throw new Error(error.message)
+    task.scheduled_at = null
+    task.caldav_event_uid = null
+    task.caldav_calendar_id = null
     task.labels = newLabels
+    task.description = _buildTaskDescription(task)
   }
 
-  async function updateStatusText(taskId, content) {
-    await api(token.value, `/tasks/${taskId}`, 'POST', { content })
+  async function updateTaskTriage(taskId, { priority, labels: newLabels, dueDate, description, content }) {
     const task = tasks.value.find(t => t.id === taskId)
-    if (task) task.content = content
-  }
-
-  async function renameProject(projectId, name) {
-    await api(token.value, `/projects/${projectId}`, 'POST', { name })
-    const project = projects.value.find(p => p.id === projectId)
-    if (project) project.name = name
-  }
-
-  async function addCollaborator(projectId, name) {
-    const task = getProjectStage(tasks.value, stageLabels.value, projectId)?.task ?? projectStatusTask(projectId)
-    if (!task) return
-    const label = `person::${name}`
-    const newLabels = [...(task.labels || []), label]
-    await api(token.value, `/tasks/${task.id}`, 'POST', { labels: newLabels })
-    task.labels = newLabels
-  }
-
-  async function removeCollaborator(projectId, name) {
-    const task = getProjectStage(tasks.value, stageLabels.value, projectId)?.task ?? projectStatusTask(projectId)
-    if (!task) return
-    const newLabels = (task.labels || []).filter(l => stripPersonPrefix(l) !== name)
-    await api(token.value, `/tasks/${task.id}`, 'POST', { labels: newLabels })
-    task.labels = newLabels
-  }
-
-  async function updateVenue(projectId, name) {
-    const existing = projectDeadlineTaskBase(projectId)
-    if (!name) return
-    if (existing) {
-      if (name === existing.content) return
-      await api(token.value, `/tasks/${existing.id}`, 'POST', { content: name })
-      existing.content = name
-    } else {
-      const sectionId = deadlineSectionByProject.value.get(projectId)
-      if (!sectionId) return
-      const task = await api(token.value, '/tasks', 'POST', { content: name, project_id: projectId, section_id: sectionId })
-      tasks.value.push(task)
-    }
-  }
-
-  async function setDeadlineDate(projectId, dateVal) {
-    let task = projectDeadlineTaskBase(projectId)
-    if (!task) {
-      const sectionId = deadlineSectionByProject.value.get(projectId)
-      if (!sectionId) return
-      const project = projects.value.find(p => p.id === projectId)
-      task = await api(token.value, '/tasks', 'POST', {
-        content: project?.name || 'Deadline',
-        project_id: projectId,
-        section_id: sectionId,
-      })
-      tasks.value.push(task)
-    }
-    const body = dateVal ? { due_date: dateVal } : { due_string: 'no due date' }
-    await api(token.value, `/tasks/${task.id}`, 'POST', body)
-    task.due = dateVal ? { date: dateVal } : null
-  }
-
-  function projectSummaryTask(projectId) {
-    const sectionId = summarySectionByProject.value.get(projectId)
-    if (!sectionId) return null
-    return tasks.value.find(t => t.project_id === projectId && t.section_id === sectionId && !t.is_completed) ?? null
-  }
-
-  async function updateSummary(projectId, text) {
-    const existing = projectSummaryTask(projectId)
-    if (!text) return
-    if (existing) {
-      if (text === existing.content) return
-      await api(token.value, `/tasks/${existing.id}`, 'POST', { content: text })
-      existing.content = text
-    } else {
-      const sectionId = summarySectionByProject.value.get(projectId)
-      if (!sectionId) return
-      const task = await api(token.value, '/tasks', 'POST', { content: text, project_id: projectId, section_id: sectionId })
-      tasks.value.push(task)
-    }
-  }
-
-  function projectSubmissionTask(projectId) {
-    const sectionId = submissionSectionByProject.value.get(projectId)
-    if (!sectionId) return null
-    return tasks.value.find(t => t.project_id === projectId && t.section_id === sectionId && !t.is_completed) ?? null
-  }
-
-  async function updateSubmissionUrl(projectId, url) {
-    const existing = projectSubmissionTask(projectId)
-    if (!url) {
-      if (existing) {
-        await api(token.value, `/tasks/${existing.id}`, 'POST', { content: ' ' })
-        existing.content = ' '
-      }
-      return
-    }
-    if (existing) {
-      if (url === existing.content) return
-      await api(token.value, `/tasks/${existing.id}`, 'POST', { content: url })
-      existing.content = url
-    } else {
-      const sectionId = submissionSectionByProject.value.get(projectId)
-      if (!sectionId) return
-      const task = await api(token.value, '/tasks', 'POST', { content: url, project_id: projectId, section_id: sectionId })
-      tasks.value.push(task)
-    }
-  }
-
-  async function updateTaskTriage(taskId, { priority, labels, dueDate, description, content }) {
-    const body = {}
-    if (priority !== undefined) body.priority = priority
-    if (labels !== undefined) body.labels = labels
+    const updates = {}
+    if (priority !== undefined) updates.priority = priority
+    if (newLabels !== undefined) updates.labels = newLabels
+    if (content !== undefined) updates.content = content
+    if (dueDate !== undefined) updates.due_date = dueDate || null
     if (description !== undefined) {
-      // Preserve managed lines — scheduler and calendar event ID, not edited by the user
-      const task = tasks.value.find(t => t.id === taskId)
-      const managedLines = task
-        ? (task.description || '').split('\n').filter(l => l.startsWith('📅 Scheduled:') || l.startsWith('📅 GCal:'))
-        : []
-      const userLines = description.split('\n').filter(l => !l.startsWith('📅 Scheduled:') && !l.startsWith('📅 GCal:'))
-      const trimmed = userLines.join('\n').trimEnd()
-      body.description = managedLines.length ? (trimmed ? `${trimmed}\n${managedLines.join('\n')}` : managedLines.join('\n')) : description
+      // Strip managed annotation lines — they live in DB columns, not the description field
+      const userLines = description
+        .split('\n')
+        .filter(l => !l.startsWith('📅 Scheduled:') && !l.startsWith('📅 GCal:'))
+      updates.description = userLines.join('\n').trim()
     }
-    if (content !== undefined) {
-      body.content = content
-    }
-    if (dueDate !== undefined) {
-      if (dueDate) body.due_date = dueDate
-      else body.due_string = 'no due date'
-    }
-    await api(token.value, `/tasks/${taskId}`, 'POST', body)
-    const task = tasks.value.find(t => t.id === taskId)
+
+    const { error } = await supabase.from('tasks').update(updates).eq('id', taskId)
+    if (error) throw new Error(error.message)
+
     if (task) {
       if (priority !== undefined) task.priority = priority
-      if (labels !== undefined) task.labels = labels
-      if (description !== undefined) task.description = body.description
+      if (newLabels !== undefined) task.labels = newLabels
       if (content !== undefined) task.content = content
       if (dueDate !== undefined) task.due = dueDate ? { date: dueDate } : null
-      if (content !== undefined || labels !== undefined || description !== undefined) {
+      if (description !== undefined) {
+        task.description = _buildTaskDescription({ ...task, description: updates.description })
+      }
+      if (content !== undefined || newLabels !== undefined || description !== undefined) {
         const calStore = useCalendarStore()
         if (calStore.isConnected) {
           const projectName = projects.value.find(p => p.id === task.project_id)?.name ?? ''
@@ -513,70 +483,15 @@ export const useBoardStore = defineStore('board', () => {
     }
   }
 
-  async function deleteProject(projectId) {
-    await api(token.value, `/projects/${projectId}`, 'DELETE')
-    projects.value = projects.value.filter(p => p.id !== projectId)
-    tasks.value = tasks.value.filter(t => t.project_id !== projectId)
-  }
-
-  async function createProject(name) {
-    const root = projects.value.find(p => !p.parent_id && p.name === 'Research')
-    if (!root) throw new Error('Research project not found')
-
-    const project = await api(token.value, '/projects', 'POST', { name, parent_id: root.id })
-
-    const [statusSection, deadlinesSection, summarySection, submissionSection] = await Promise.all([
-      api(token.value, '/sections', 'POST', { name: '📌 Current Status', project_id: project.id }),
-      api(token.value, '/sections', 'POST', { name: '📌 Deadlines', project_id: project.id }),
-      api(token.value, '/sections', 'POST', { name: '📌 Summary', project_id: project.id }),
-      api(token.value, '/sections', 'POST', { name: '📌 Submission', project_id: project.id }),
-    ])
-
-    const defaultLabel = stages.value?.[0]?.label || 'stage::planning'
-    const statusTask = await api(token.value, '/tasks', 'POST', {
-      content: name,
-      project_id: project.id,
-      section_id: statusSection.id,
-      labels: [defaultLabel],
-    })
-
-    projects.value.push(project)
-    tasks.value.push(statusTask)
-    excludedSectionIds.value = new Set([...excludedSectionIds.value, statusSection.id, deadlinesSection.id, summarySection.id, submissionSection.id])
-    deadlineSectionIds.value = new Set([...deadlineSectionIds.value, deadlinesSection.id])
-    statusSectionIds.value = new Set([...statusSectionIds.value, statusSection.id])
-    const dm = new Map(deadlineSectionByProject.value)
-    dm.set(project.id, deadlinesSection.id)
-    deadlineSectionByProject.value = dm
-    const sm = new Map(summarySectionByProject.value)
-    sm.set(project.id, summarySection.id)
-    summarySectionByProject.value = sm
-    const sbm = new Map(submissionSectionByProject.value)
-    sbm.set(project.id, submissionSection.id)
-    submissionSectionByProject.value = sbm
-
-    return project
-  }
-
-  function projectDeadlineTaskObj(projectId) {
-    const candidates = tasks.value.filter(
-      t => t.project_id === projectId && deadlineSectionIds.value.has(t.section_id) && !t.is_completed && t.due
-    )
-    if (!candidates.length) return null
-    const future = candidates.filter(t => parseLocalDate(t.due.date) > new Date())
-    return future.length
-      ? future.sort((a, b) => new Date(a.due.date) - new Date(b.due.date))[0]
-      : candidates.sort((a, b) => new Date(b.due.date) - new Date(a.due.date))[0]
-  }
-
   return {
-    token, stages, projects, tasks, loading, lastUpdated, cardDragging, triageTaskIds, triageCurrentId, pendingScheduleTask, labels,
-    activeFilter, stageLabels, displayProjects, inboxProjectId, excludedSectionIds, deadlineSectionIds,
-    allCollaborators, allVenues,
-    setupStatus,
+    token, stages, projects, tasks, loading, lastUpdated, cardDragging,
+    triageTaskIds, triageCurrentId, pendingScheduleTask, labels,
+    activeFilter, stageLabels, displayProjects, inboxProjectId,
+    excludedSectionIds, deadlineSectionIds, allCollaborators, allVenues, setupStatus,
     initStages, saveToken, saveStages, resetToken, loadData, loadIfStale,
     projectStage, projectStatusTask, projectMeta, projectTasks, projectDeadline,
-    moveStage, completeTask, deleteTask, reorderTasks, quickAddTask, updateTaskDue, saveGCalEvent, saveScheduledTime, clearScheduledTime, updateStatusText,
+    moveStage, completeTask, deleteTask, reorderTasks, quickAddTask, updateTaskDue,
+    saveGCalEvent, saveScheduledTime, clearScheduledTime, updateStatusText,
     updateVenue, setDeadlineDate, addCollaborator, removeCollaborator, renameProject,
     projectDeadlineTaskBase, projectDeadlineTaskObj,
     projectSummaryTask, updateSummary, projectSubmissionTask, updateSubmissionUrl,

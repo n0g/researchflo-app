@@ -60,23 +60,7 @@
           <div class="settings-section">
             <div class="settings-section-title">Pipeline Stages</div>
             <div class="settings-card">
-              <p class="settings-hint">Map Todoist labels to pipeline stages. Order = column order on the board.</p>
-
-              <template v-if="boardStore.labels.some(l => l.name.startsWith('stage::'))">
-                <div class="settings-subsection-label">Your Todoist labels</div>
-                <div class="label-chips" role="list">
-                  <span
-                    v-for="l in boardStore.labels.filter(l => l.name.startsWith('stage::'))"
-                    :key="l.id"
-                    class="chip"
-                    tabindex="0"
-                    role="button"
-                    :aria-label="'Use label ' + l.name"
-                    @click="fillLabel(l.name)"
-                    @keydown.enter.prevent="fillLabel(l.name)"
-                  >{{ l.name }}</span>
-                </div>
-              </template>
+              <p class="settings-hint">Drag to reorder. Order determines column order on the board.</p>
 
               <div ref="rowsEl" class="stage-rows">
                 <div
@@ -107,17 +91,10 @@
                   </div>
                   <input
                     type="text"
-                    placeholder="Display name"
-                    aria-label="Stage display name"
+                    placeholder="Stage name"
+                    aria-label="Stage name"
                     v-model="row.name"
                     class="stage-name-input"
-                  >
-                  <input
-                    type="text"
-                    placeholder="Todoist label"
-                    aria-label="Todoist label name"
-                    v-model="row.label"
-                    class="stage-label-input"
                   >
                   <button class="del" :aria-label="'Remove stage ' + row.name" @click="stageRows.splice(i, 1)"><i class="ph ph-x" aria-hidden="true"></i></button>
                 </div>
@@ -126,7 +103,9 @@
               <div v-if="stageError" class="error-msg" role="alert">{{ stageError }}</div>
               <div class="settings-actions">
                 <button class="btn sm" @click="addStageRow">+ Add stage</button>
-                <button class="btn sm primary" @click="saveStages">Save stages</button>
+                <button class="btn sm primary" :disabled="savingStages" @click="saveStages">
+                  {{ savingStages ? 'Saving…' : 'Save stages' }}
+                </button>
               </div>
             </div>
           </div>
@@ -245,8 +224,8 @@
             <div class="settings-section-title">Account</div>
             <div class="settings-row-group">
               <div class="settings-row">
-                <span class="settings-row-label">Todoist connection</span>
-                <button class="btn sm danger" @click="disconnect">Disconnect</button>
+                <span class="settings-row-label">Signed in</span>
+                <button class="btn sm danger" @click="signOut">Sign out</button>
               </div>
             </div>
           </div>
@@ -261,13 +240,13 @@
 <script setup>
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useBoardStore } from '../stores/board.js'
+import { useAuthStore } from '../stores/auth.js'
 import { useReviewsStore } from '../stores/reviews.js'
 import { useCalendarStore } from '../stores/calendar.js'
 import { useSidebar } from '../composables/useSidebar.js'
 import { useTheme } from '../composables/useTheme.js'
 import { useAccentColor } from '../composables/useAccentColor.js'
 import { DEFAULT_STAGES, getStageIcon } from '../lib/helpers.js'
-import { apiAll } from '../lib/todoist.js'
 import { initSortable } from '../lib/sortable.js'
 import AppSidebar from '../components/AppSidebar.vue'
 import AppTabbar from '../components/AppTabbar.vue'
@@ -295,10 +274,11 @@ const rowsEl = ref(null)
 let keyCounter = 0
 const stageRows = ref((boardStore.stages || DEFAULT_STAGES).map(s => ({ ...s, icon: getStageIcon(s), key: keyCounter++ })))
 const stageError = ref('')
+const savingStages = ref(false)
 const openIconPickerKey = ref(null)
 
-function addStageRow(labelVal = '', nameVal = '') {
-  stageRows.value.push({ name: nameVal, label: labelVal, icon: 'kanban', key: keyCounter++ })
+function addStageRow() {
+  stageRows.value.push({ name: '', icon: 'kanban', key: keyCounter++ })
 }
 
 function toggleIconPicker(key) {
@@ -314,19 +294,20 @@ function closeIconPicker(e) {
   if (!e.target.closest('.icon-picker-wrap')) openIconPickerKey.value = null
 }
 
-function fillLabel(name) {
-  const empty = stageRows.value.find(r => !r.label)
-  if (empty) { empty.label = name; return }
-  addStageRow(name)
-}
-
-function saveStages() {
+async function saveStages() {
   const stages = stageRows.value
-    .map(r => ({ name: r.name.trim(), label: r.label.trim(), icon: r.icon || 'kanban' }))
-    .filter(r => r.name && r.label)
+    .map(r => ({ id: r.id ?? null, name: r.name.trim(), icon: r.icon || 'kanban' }))
+    .filter(r => r.name)
   if (!stages.length) { stageError.value = 'Add at least one stage.'; return }
   stageError.value = ''
-  boardStore.saveStages(stages)
+  savingStages.value = true
+  try {
+    await boardStore.saveStages(stages)
+    // Refresh rows from store so new IDs are picked up
+    stageRows.value = (boardStore.stages || []).map(s => ({ ...s, icon: getStageIcon(s), key: keyCounter++ }))
+  } finally {
+    savingStages.value = false
+  }
 }
 
 // ── Sites ──
@@ -351,18 +332,14 @@ function addSite() {
 }
 
 // ── Account ──
-function disconnect() {
-  boardStore.resetToken()
-}
+const authStore = useAuthStore()
+function signOut() { authStore.signOut() }
 
 
 
 onMounted(async () => {
   if (rowsEl.value) initSortable(rowsEl.value, stageRows)
   document.addEventListener('click', closeIconPicker)
-  try {
-    boardStore.labels = await apiAll(boardStore.token, '/labels')
-  } catch { boardStore.labels = [] }
 })
 
 onUnmounted(() => {

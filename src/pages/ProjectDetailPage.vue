@@ -131,18 +131,18 @@
                 :aria-expanded="stagePopupOpen"
                 @click.stop="stagePopupOpen = !stagePopupOpen"
               >
-                <i :class="`ph ph-${getStageIcon(stageObj)}`" class="stage-popup-icon" aria-hidden="true"></i>
-                <span>{{ stageObj?.name ?? 'Unassigned' }}</span>
+                <i :class="`ph ph-${getStageIcon(stageInfo)}`" class="stage-popup-icon" aria-hidden="true"></i>
+                <span>{{ stageInfo?.name ?? 'Unassigned' }}</span>
                 <i class="ph ph-caret-down popup-chevron" aria-hidden="true"></i>
               </button>
-              <div v-if="stagePopupOpen" class="popup-dropdown" role="listbox" :aria-label="'Pipeline stage: ' + (stageObj?.name ?? 'Unassigned')">
+              <div v-if="stagePopupOpen" class="popup-dropdown" role="listbox" :aria-label="'Pipeline stage: ' + (stageInfo?.name ?? 'Unassigned')">
                 <button
                   v-for="stage in store.stages"
-                  :key="stage.label"
+                  :key="stage.id"
                   class="popup-option"
                   role="option"
-                  :aria-selected="stageInfo?.label === stage.label"
-                  :class="{ selected: stageInfo?.label === stage.label }"
+                  :aria-selected="stageInfo?.id === stage.id"
+                  :class="{ selected: stageInfo?.id === stage.id }"
                   @click="selectStage(stage)"
                 >
                   <i :class="`ph ph-${getStageIcon(stage)}`" aria-hidden="true"></i>
@@ -314,14 +314,8 @@
             ></textarea>
           </div>
 
-          <!-- Todoist link + delete -->
+          <!-- Delete -->
           <div v-if="project" class="project-meta-footer">
-            <a
-              class="todoist-link external"
-              :href="`https://app.todoist.com/app/project/${project.id}`"
-              target="_blank"
-              rel="noopener noreferrer"
-            >Open in Todoist ↗</a>
             <button class="project-delete-btn" title="Delete project" aria-label="Delete project" @click="confirmDelete">
               <i class="ph ph-trash" aria-hidden="true"></i>
             </button>
@@ -402,7 +396,7 @@ import { f7 } from 'framework7-vue/bundle'
 import { useBoardStore } from '../stores/board.js'
 import { useReviewsStore } from '../stores/reviews.js'
 import { useSidebar } from '../composables/useSidebar.js'
-import { VENUES, stripPersonPrefix, isPersonLabel, getStageIcon } from '../lib/helpers.js'
+import { getStageIcon } from '../lib/helpers.js'
 import { fetchPaperStatus, extractPaperId, matchSiteForUrl } from '../lib/hotcrp.js'
 
 import AppSidebar from '../components/AppSidebar.vue'
@@ -484,16 +478,7 @@ async function onDragEnd() {
 const deadlineTask = computed(() => store.projectDeadlineTaskBase(projectId.value))
 const deadline = computed(() => store.projectDeadline(projectId.value))
 
-const stageLabelSet = computed(() => new Set(store.stageLabels))
-const stageObj = computed(() => store.stages?.find(s => s.label === stageInfo.value?.label) ?? null)
-
-const personLabels = computed(() =>
-  stageInfo.value
-    ? (stageInfo.value.task.labels || [])
-        .filter(l => !stageLabelSet.value.has(l) && !VENUES.includes(l.toLowerCase()) && isPersonLabel(l))
-        .map(stripPersonPrefix)
-    : []
-)
+const personLabels = computed(() => project.value?.collaborators || [])
 
 // ── Deadline ──
 const editingDeadline = ref(false)
@@ -582,7 +567,7 @@ async function saveTitle() {
 function cancelTitle() { editingTitle.value = false }
 
 // ── Status ──
-const statusText = computed(() => stageInfo.value?.task.content ?? '')
+const statusText = computed(() => project.value?.status_text ?? '')
 const editingStatus = ref(false)
 const statusDraft = ref('')
 const statusTextareaEl = ref(null)
@@ -606,8 +591,8 @@ async function startEdit(field) {
 async function saveStatus() {
   editingStatus.value = false
   const val = statusDraft.value.trim() || statusText.value
-  if (val !== statusText.value && stageInfo.value) {
-    await store.updateStatusText(stageInfo.value.task.id, val).catch(console.error)
+  if (val !== statusText.value && project.value) {
+    await store.updateStatusText(projectId.value, val).catch(console.error)
   }
 }
 function cancelStatus() { editingStatus.value = false }
@@ -717,8 +702,8 @@ const stagePopupOpen = ref(false)
 
 async function selectStage(stage) {
   stagePopupOpen.value = false
-  if (stageInfo.value?.label === stage.label) return
-  await store.moveStage(projectId.value, stageInfo.value?.task.id ?? '', stageInfo.value?.label ?? '', stage.label).catch(console.error)
+  if (stageInfo.value?.id === stage.id) return
+  await store.moveStage(projectId.value, null, stageInfo.value?.id ?? null, stage.id).catch(console.error)
 }
 
 // ── Collaborator combo ──

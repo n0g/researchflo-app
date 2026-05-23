@@ -24,14 +24,14 @@
         <div class="board" role="main" :aria-busy="store.loading">
           <BoardColumn
             v-for="(stage, idx) in store.stages"
-            :key="stage.label"
+            :key="stage.id || stage.name"
             :stage="stage"
             :stage-index="idx"
             @card-click="openProject"
           />
           <BoardColumn
             v-if="unassignedProjects.length"
-            :stage="{ name: 'Unassigned', label: '' }"
+            :stage="{ name: 'Unassigned', id: null }"
             :stage-index="99"
             :override-projects="unassignedProjects"
             @card-click="openProject"
@@ -106,9 +106,9 @@ onMounted(async () => {
   triggerSubmissionStatuses()
   const projectId = new URLSearchParams(location.search).get('project')
   if (projectId) f7.view.current.router.navigate(`/project/${projectId}/`)
-  const label = new URLSearchParams(location.search).get('stage')
-  if (label && store.stages) {
-    const idx = store.stages.findIndex(s => s.label === label)
+  const stageId = new URLSearchParams(location.search).get('stage')
+  if (stageId && store.stages) {
+    const idx = store.stages.findIndex(s => s.id === stageId)
     if (idx !== -1) {
       const col = document.querySelector(`.col[data-stage="${idx}"]`)
       if (col) col.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' })

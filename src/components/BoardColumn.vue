@@ -3,7 +3,7 @@
     class="col"
     :class="{ 'drag-over': dragOver }"
     :data-stage="stageIndex"
-    :data-stage-label="stage.label"
+    :data-stage-id="stage.id"
     @dragover.prevent
   >
     <div class="col-head">
@@ -27,7 +27,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useBoardStore } from '../stores/board.js'
-import { getProjectDeadline, stripPersonPrefix, getStageIcon } from '../lib/helpers.js'
+import { getStageIcon } from '../lib/helpers.js'
 import ProjectCard from './ProjectCard.vue'
 
 const props = defineProps({
@@ -43,28 +43,21 @@ const dragOver = ref(false)
 
 const projects = computed(() => {
   if (props.overrideProjects) return props.overrideProjects
-  const stageSet = new Set(store.stageLabels)
   let list = store.displayProjects.filter(p => {
     const s = store.projectStage(p.id)
-    return s && s.label === props.stage.label
+    return s && s.id === props.stage.id
   })
   if (store.activeFilter) {
     const { type, value } = store.activeFilter
     list = list.filter(p => {
-      if (type === 'person') {
-        const stage = store.projectStage(p.id)
-        return stage && (stage.task.labels || []).some(l => stripPersonPrefix(l) === value)
-      }
-      if (type === 'venue') {
-        const meta = store.projectMeta(p.id)
-        return meta.venue === value
-      }
+      if (type === 'person') return (p.collaborators || []).includes(value)
+      if (type === 'venue') return p.venue === value
       return true
     })
   }
   return list.sort((a, b) => {
-    const da = getProjectDeadline(store.tasks, store.deadlineSectionIds, a.id)
-    const db = getProjectDeadline(store.tasks, store.deadlineSectionIds, b.id)
+    const da = store.projectDeadline(a.id)
+    const db = store.projectDeadline(b.id)
     if (!da && !db) return 0
     if (!da) return 1
     if (!db) return -1

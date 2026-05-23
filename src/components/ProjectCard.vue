@@ -73,7 +73,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useBoardStore } from '../stores/board.js'
 import { useReviewsStore } from '../stores/reviews.js'
-import { VENUES, stripPersonPrefix, isPersonLabel, nearestDue, dueStatus, formatDate } from '../lib/helpers.js'
+import { nearestDue, dueStatus, formatDate } from '../lib/helpers.js'
 
 const props = defineProps({
   project: { type: Object, required: true },
@@ -88,7 +88,6 @@ const cardEl = ref(null)
 const dragging = ref(false)
 
 const stageInfo = computed(() => store.projectStage(props.project.id))
-const stageLabelSet = computed(() => new Set(store.stageLabels))
 const tasks = computed(() => store.projectTasks(props.project.id))
 const meta = computed(() => store.projectMeta(props.project.id))
 const deadline = computed(() => store.projectDeadline(props.project.id))
@@ -123,23 +122,15 @@ const scheduledHoursThisWeek = computed(() => {
   return minutes / 60
 })
 
-const statusText = computed(() => stageInfo.value?.task.content ?? '')
-const personLabels = computed(() => {
-  if (!stageInfo.value) return []
-  return (stageInfo.value.task.labels || [])
-    .filter(l => !stageLabelSet.value.has(l) && !VENUES.includes(l.toLowerCase()) && isPersonLabel(l))
-    .map(stripPersonPrefix)
-})
+const statusText = computed(() => props.project.status_text || '')
+const personLabels = computed(() => props.project.collaborators || [])
 
-const dateStr = computed(() => {
-  const t = stageInfo.value?.task
-  return t ? (t.updated_at || t.created_at) : null
+const staleDays = computed(() => {
+  const ts = props.project.updated_at || props.project.created_at
+  return ts ? (Date.now() - new Date(ts).getTime()) / 86400000 : null
 })
-const staleDays = computed(() =>
-  dateStr.value ? (Date.now() - new Date(dateStr.value).getTime()) / 86400000 : null
-)
 const isStale = computed(() => staleDays.value !== null && staleDays.value > 14)
-const isOnIce = computed(() => props.stage?.label === 'stage::on-ice')
+const isOnIce = computed(() => props.stage?.name === 'On Ice')
 const staleWeeks = computed(() => staleDays.value ? Math.floor(staleDays.value / 7) : 0)
 
 // Submission status badge
@@ -280,11 +271,10 @@ onMounted(() => {
       dragging.value = false
       currentCol?.classList.remove('drag-over')
       document.documentElement.style.removeProperty('--placeholder-h')
-      const newLabel  = currentCol?.dataset.stageLabel ?? null
-      const oldLabel  = stageInfo.value?.label ?? ''
-      const oldTaskId = stageInfo.value?.task.id ?? ''
-      if (newLabel && newLabel !== oldLabel) {
-        store.moveStage(props.project.id, oldTaskId, oldLabel, newLabel).catch(console.error)
+      const newStageId = currentCol?.dataset.stageId ?? null
+      const oldStageId = stageInfo.value?.id ?? null
+      if (newStageId && newStageId !== oldStageId) {
+        store.moveStage(props.project.id, null, oldStageId, newStageId).catch(console.error)
       }
     }
 

@@ -1,16 +1,13 @@
 <template>
   <f7-app v-bind="f7params">
-    <!-- Not signed in to Supabase -->
+    <!-- Not signed in -->
     <f7-view v-if="!authStore.user" main url="/login/" />
 
-    <!-- Signed in but no Todoist token yet -->
-    <f7-view v-else-if="!store.token" main url="/token/" />
-
-    <!-- Fully authenticated: tab views -->
+    <!-- Signed in: tab views -->
     <template v-else>
       <f7-views tabs>
         <f7-view id="view-board"    name="board"    tab tab-active url="/board/"    :browser-history="false" />
-        <f7-view id="view-inbox"   name="inbox"   tab url="/inbox/"    :browser-history="false" />
+        <f7-view id="view-inbox"    name="inbox"    tab url="/inbox/"    :browser-history="false" />
         <f7-view id="view-schedule" name="schedule" tab url="/schedule/" :browser-history="false" />
         <f7-view id="view-settings" name="settings" tab url="/settings/" :browser-history="false" />
       </f7-views>
@@ -39,30 +36,29 @@ const reviewsStore = useReviewsStore()
 const calStore = useCalendarStore()
 const settingsStore = useSettingsStore()
 
-// Guard: watches only fire for user-made changes, not the initial settings load
+// Guard: prevent watchers from re-saving settings that were just loaded
 const settingsLoaded = ref(false)
 
 watch(() => store.stages, (stages) => {
-  if (!settingsLoaded.value || !store.token || !stages) return
-  settingsStore.save(store.token, 'stages', stages)
+  if (!settingsLoaded.value || !stages) return
+  settingsStore.save('stages', stages)
 }, { deep: true })
 
 watch(() => reviewsStore.sites, (sites) => {
-  if (!settingsLoaded.value || !store.token) return
-  settingsStore.save(store.token, 'hotcrp_sites', sites)
+  if (!settingsLoaded.value) return
+  settingsStore.save('hotcrp_sites', sites)
 }, { deep: true })
 
 watch(() => calStore.selectedCalendarId, (id) => {
-  if (!settingsLoaded.value || !store.token) return
-  settingsStore.save(store.token, 'gcal_calendar_id', id)
+  if (!settingsLoaded.value) return
+  settingsStore.save('gcal_calendar_id', id)
 })
 
 onMounted(async () => {
   await authStore.init()
   calStore.init().catch(() => {})
-  if (!store.token) { settingsLoaded.value = true; return }
 
-  const settings = await settingsStore.load(store.token)
+  const settings = await settingsStore.load()
 
   if (settings.stages?.length)      store.saveStages(settings.stages)
   if (settings.hotcrp_sites)        reviewsStore.setSites(settings.hotcrp_sites)
@@ -72,17 +68,17 @@ onMounted(async () => {
   await nextTick()
   settingsLoaded.value = true
 
-  // Backfill: write any settings not yet in Todoist (e.g. first run of sync feature)
+  // Backfill: write any settings not yet in Supabase
   if (!settings.stages && store.stages?.length)
-    settingsStore.save(store.token, 'stages', store.stages)
+    settingsStore.save('stages', store.stages)
   if (!settings.hotcrp_sites && reviewsStore.sites.length)
-    settingsStore.save(store.token, 'hotcrp_sites', reviewsStore.sites)
+    settingsStore.save('hotcrp_sites', reviewsStore.sites)
   if (!settings.gcal_calendar_id && calStore.selectedCalendarId && calStore.selectedCalendarId !== 'primary')
-    settingsStore.save(store.token, 'gcal_calendar_id', calStore.selectedCalendarId)
+    settingsStore.save('gcal_calendar_id', calStore.selectedCalendarId)
 })
 
 const f7params = {
-  name: 'Research Board',
+  name: 'researchflo',
   theme: 'ios',
   darkMode: false,
   routes,
