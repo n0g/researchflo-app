@@ -54,6 +54,9 @@ useAccentColor()
 
 const authStore = useAuthStore()
 const store = useBoardStore()
+
+// Capture synchronously — Supabase's initialize() clears the URL hash before onMounted fires
+const hadAuthCallback = !!window.location.hash || new URLSearchParams(window.location.search).has('code')
 const reviewsStore = useReviewsStore()
 const calStore = useCalendarStore()
 const settingsStore = useSettingsStore()
@@ -104,14 +107,7 @@ onMounted(async () => {
     window.history.replaceState({}, '', window.location.pathname)
   }
 
-  // Detect auth callback before clearing URL (hash = implicit, ?code = PKCE)
-  const hadAuthCallback = !!window.location.hash || new URLSearchParams(window.location.search).has('code')
-
   await authStore.init()
-
-  if (hadAuthCallback) {
-    window.history.replaceState({}, '', window.location.pathname)
-  }
 
   // Claim pending invite if user is signed in
   const pendingInvite = localStorage.getItem('pending_invite_token')
