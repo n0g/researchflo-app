@@ -131,7 +131,7 @@ html[data-theme="light"] .token-box a { color: #3b82f6; }
 .stage-rows { display: flex; flex-direction: column; gap: 4px; }
 .stage-row {
   display: grid;
-  grid-template-columns: 24px 32px 1fr 1fr 32px;
+  grid-template-columns: 24px 32px 1fr 32px;
   gap: 8px;
   align-items: center;
 }
