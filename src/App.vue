@@ -50,9 +50,16 @@ watch(() => calStore.selectedCalendarId, (id) => {
 })
 
 onMounted(async () => {
+  // Capture ?invite=TOKEN from URL before F7 boots (deep links don't work with browser-history: false)
+  const urlInvite = new URLSearchParams(window.location.search).get('invite')
+  if (urlInvite) {
+    localStorage.setItem('pending_invite_token', urlInvite)
+    window.history.replaceState({}, '', window.location.pathname)
+  }
+
   await authStore.init()
 
-  // Claim pending invite if user just signed up via an invite link
+  // Claim pending invite if user is already signed in
   const pendingInvite = localStorage.getItem('pending_invite_token')
   if (pendingInvite && authStore.user) {
     localStorage.removeItem('pending_invite_token')

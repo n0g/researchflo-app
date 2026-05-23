@@ -381,7 +381,8 @@ async function loadPending() {
 }
 
 function copyInviteLink(person) {
-  const url = `${window.location.origin}/invite/${person.invite_token}`
+  const base = window.location.origin + window.location.pathname
+  const url = `${base}?invite=${person.invite_token}`
   navigator.clipboard.writeText(url)
   inviteCopied.value = person.id
   setTimeout(() => { inviteCopied.value = null }, 2000)
