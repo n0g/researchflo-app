@@ -19,8 +19,8 @@
 
           <div ref="taskListEl" role="list" aria-label="Inbox tasks" @pointerdown="onDragStart">
             <div v-if="!inboxTasks.length" class="triage-empty-list">
-              <i v-if="store.inboxProjectId" class="ph ph-wind" aria-hidden="true"></i>
-              {{ store.inboxProjectId ? 'Inbox is empty' : 'Inbox project not found' }}
+              <i class="ph ph-wind" aria-hidden="true"></i>
+              Inbox is empty
             </div>
             <template v-for="(task, idx) in inboxTasks" :key="task.id">
               <div v-if="dragId && dropIndex === idx" class="task-drop-indicator" aria-hidden="true" />
@@ -133,7 +133,7 @@ const newTaskContent = ref('')
 const quickAddInputEl = ref(null)
 
 const inboxTasks = computed(() =>
-  store.tasks.filter(t => t.project_id === store.inboxProjectId && !t.is_completed)
+  store.tasks.filter(t => t.project_id == null && !t.is_completed)
 )
 
 function startAdd() {
@@ -143,8 +143,8 @@ function startAdd() {
 
 async function submitAdd() {
   const content = newTaskContent.value.trim()
-  if (content && store.inboxProjectId) {
-    await store.quickAddTask(content, store.inboxProjectId).catch(console.error)
+  if (content) {
+    await store.quickAddTask(content, null).catch(console.error)
   }
   newTaskContent.value = ''
   addingTask.value = false

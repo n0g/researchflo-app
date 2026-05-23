@@ -31,7 +31,7 @@
           />
           <BoardColumn
             v-if="unassignedProjects.length"
-            :stage="{ name: 'Unassigned', id: null }"
+            :stage="{ name: 'Unassigned', id: null, icon: 'ghost' }"
             :stage-index="99"
             :override-projects="unassignedProjects"
             @card-click="openProject"

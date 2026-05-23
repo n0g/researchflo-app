@@ -39,11 +39,6 @@ const settingsStore = useSettingsStore()
 // Guard: prevent watchers from re-saving settings that were just loaded
 const settingsLoaded = ref(false)
 
-watch(() => store.stages, (stages) => {
-  if (!settingsLoaded.value || !stages) return
-  settingsStore.save('stages', stages)
-}, { deep: true })
-
 watch(() => reviewsStore.sites, (sites) => {
   if (!settingsLoaded.value) return
   settingsStore.save('hotcrp_sites', sites)
@@ -60,7 +55,6 @@ onMounted(async () => {
 
   const settings = await settingsStore.load()
 
-  if (settings.stages?.length)      store.saveStages(settings.stages)
   if (settings.hotcrp_sites)        reviewsStore.setSites(settings.hotcrp_sites)
   if (settings.gcal_calendar_id)    calStore.saveCalendarId(settings.gcal_calendar_id)
 
@@ -69,8 +63,6 @@ onMounted(async () => {
   settingsLoaded.value = true
 
   // Backfill: write any settings not yet in Supabase
-  if (!settings.stages && store.stages?.length)
-    settingsStore.save('stages', store.stages)
   if (!settings.hotcrp_sites && reviewsStore.sites.length)
     settingsStore.save('hotcrp_sites', reviewsStore.sites)
   if (!settings.gcal_calendar_id && calStore.selectedCalendarId && calStore.selectedCalendarId !== 'primary')

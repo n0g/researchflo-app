@@ -141,11 +141,20 @@ export const useBoardStore = defineStore('board', () => {
   async function loadData() {
     loading.value = true
     try {
-      const [{ data: projectsData }, { data: tasksData }, { data: stagesData }] = await Promise.all([
+      const [
+        { data: projectsData, error: projErr },
+        { data: tasksData,    error: taskErr },
+        { data: stagesData,   error: stageErr },
+      ] = await Promise.all([
         supabase.from('projects').select('*').order('name'),
         supabase.from('tasks').select('*').eq('is_completed', false),
         supabase.from('stages').select('*'),
       ])
+
+      if (projErr)  console.error('[board] projects error:', JSON.stringify(projErr))
+      if (taskErr)  console.error('[board] tasks error:', JSON.stringify(taskErr))
+      if (stageErr) console.error('[board] stages error:', JSON.stringify(stageErr))
+      console.log('[board] loaded:', projectsData?.length, 'projects,', tasksData?.length, 'tasks,', stagesData?.length, 'stages')
 
       projects.value = projectsData || []
       tasks.value = (tasksData || []).map(_transformTask)
@@ -155,8 +164,8 @@ export const useBoardStore = defineStore('board', () => {
       for (const s of (stagesData || [])) byId.set(s.id, { name: s.name, icon: s.icon || 'kanban' })
       _stageById.value = byId
 
-      // Seed display stages from DB if no user config exists yet
-      if (!stages.value && stagesData?.length) {
+      // Always sync display stages from DB so IDs stay in sync
+      if (stagesData?.length) {
         const derived = stagesData
           .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
           .map(s => ({ id: s.id, name: s.name, icon: s.icon || 'kanban' }))

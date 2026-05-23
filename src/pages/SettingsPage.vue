@@ -267,7 +267,7 @@ const { accentColor, setColor: setAccentColor } = useAccentColor()
 const STAGE_ICONS = [
   'compass', 'flask', 'pencil-line', 'eraser', 'paper-plane-tilt', 'snowflake',
   'lightbulb', 'ghost', 'target', 'clock', 'hourglass', 'check-circle',
-  'flag', 'star', 'bookmark', 'archive', 'folder', 'kanban',
+  'flag', 'star', 'bookmark', 'archive', 'folder', 'kanban', 'potted-plant',
 ]
 
 const rowsEl = ref(null)
