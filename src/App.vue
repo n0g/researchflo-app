@@ -51,6 +51,14 @@ watch(() => calStore.selectedCalendarId, (id) => {
 
 onMounted(async () => {
   await authStore.init()
+
+  // Claim pending invite if user just signed up via an invite link
+  const pendingInvite = localStorage.getItem('pending_invite_token')
+  if (pendingInvite && authStore.user) {
+    localStorage.removeItem('pending_invite_token')
+    await store.claimInvite(pendingInvite).catch(console.error)
+  }
+
   calStore.init().catch(() => {})
 
   const settings = await settingsStore.load()

@@ -9,6 +9,7 @@ import InboxPage from './pages/InboxPage.vue'
 import TaskDetailPage from './pages/TaskDetailPage.vue'
 import SchedulePage from './pages/SchedulePage.vue'
 import SchedulePlacePage from './pages/SchedulePlacePage.vue'
+import InvitePage from './pages/InvitePage.vue'
 
 export default [
   { path: '/', component: LoginPage },
@@ -23,4 +24,5 @@ export default [
   { path: '/schedule/', component: SchedulePage },
   { path: '/schedule/place/', component: SchedulePlacePage },
   { path: '/settings/', component: SettingsPage },
+  { path: '/invite/:token/', component: InvitePage, props: true },
 ]

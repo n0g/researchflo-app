@@ -110,6 +110,26 @@
             </div>
           </div>
 
+          <!-- ── Collaborators ── -->
+          <div class="settings-section">
+            <div class="settings-section-title">Collaborators</div>
+            <div class="settings-card">
+              <p class="settings-hint">People in your projects who haven't joined yet. Send them an invite link to create an account.</p>
+              <div v-if="!pendingCollaborators.length" class="settings-empty">Everyone is already on the platform.</div>
+              <div v-else class="site-rows">
+                <div v-for="person in pendingCollaborators" :key="person.id" class="site-row">
+                  <div class="site-info">
+                    <div class="site-name-text">{{ person.display_name }}</div>
+                    <div v-if="person.email" class="site-url-text">{{ person.email }}</div>
+                  </div>
+                  <button class="btn sm" @click="copyInviteLink(person)">
+                    {{ inviteCopied === person.id ? 'Copied!' : 'Copy invite link' }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- ── Review Sites ── -->
           <div class="settings-section">
             <div class="settings-section-title">Review Sites</div>
@@ -331,6 +351,21 @@ function addSite() {
   newSiteName.value = ''
 }
 
+// ── Collaborators ──
+const pendingCollaborators = ref([])
+const inviteCopied = ref(null)
+
+async function loadPending() {
+  pendingCollaborators.value = await boardStore.loadPendingCollaborators().catch(() => [])
+}
+
+function copyInviteLink(person) {
+  const url = `${window.location.origin}/invite/${person.invite_token}`
+  navigator.clipboard.writeText(url)
+  inviteCopied.value = person.id
+  setTimeout(() => { inviteCopied.value = null }, 2000)
+}
+
 // ── Account ──
 const authStore = useAuthStore()
 function signOut() { authStore.signOut() }
@@ -340,6 +375,7 @@ function signOut() { authStore.signOut() }
 onMounted(async () => {
   if (rowsEl.value) initSortable(rowsEl.value, stageRows)
   document.addEventListener('click', closeIconPicker)
+  loadPending()
 })
 
 onUnmounted(() => {

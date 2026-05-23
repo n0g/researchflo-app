@@ -56,10 +56,10 @@
           <div class="meta-section">
             <div class="meta-label">Collaborators</div>
             <div class="collab-chips">
-              <span v-for="person in personLabels" :key="person" class="collab-chip">
+              <span v-for="member in personLabels" :key="member.id" class="collab-chip">
                 <i class="ph ph-user" aria-hidden="true"></i>
-                {{ person }}
-                <button class="collab-chip-remove" :aria-label="`Remove ${person}`" @click.stop="removeCollab(person)"><i class="ph ph-x" aria-hidden="true"></i></button>
+                {{ member.display_name }}
+                <button class="collab-chip-remove" :aria-label="`Remove ${member.display_name}`" @click.stop="removeCollab(member.id)"><i class="ph ph-x" aria-hidden="true"></i></button>
               </span>
               <button v-if="!addingCollab" class="collab-add-pill" aria-label="Add collaborator" @click.stop="startAddCollab"><i class="ph ph-plus" aria-hidden="true"></i></button>
               <div v-else ref="collabWrapperEl" class="collab-combo-wrapper">
@@ -79,16 +79,16 @@
                 <div v-if="filteredCollabs.length" class="popup-dropdown" role="listbox" aria-label="Collaborator suggestions">
                   <button
                     v-for="(c, idx) in filteredCollabs"
-                    :key="c"
+                    :key="c.id"
                     class="popup-option"
                     role="option"
                     :aria-selected="false"
                     @mousedown.prevent
-                    @click="commitCollab(c)"
+                    @click="commitCollab(c.display_name)"
                     @keydown.down.prevent="focusCollabOption(idx + 1)"
                     @keydown.up.prevent="idx === 0 ? collabInputEl?.focus() : focusCollabOption(idx - 1)"
                     @keydown.escape.prevent="cancelAddCollab"
-                  >{{ c }}</button>
+                  >{{ c.display_name }}</button>
                 </div>
               </div>
             </div>
@@ -478,7 +478,7 @@ async function onDragEnd() {
 const deadlineTask = computed(() => store.projectDeadlineTaskBase(projectId.value))
 const deadline = computed(() => store.projectDeadline(projectId.value))
 
-const personLabels = computed(() => project.value?.collaborators || [])
+const personLabels = computed(() => (project.value?.members || []).map(m => m.person).filter(Boolean))
 
 // ── Deadline ──
 const editingDeadline = ref(false)
@@ -714,9 +714,9 @@ const collabWrapperEl = ref(null)
 
 const filteredCollabs = computed(() => {
   const q = collabQuery.value.toLowerCase()
-  const existing = new Set(personLabels.value)
-  return store.allCollaborators
-    .filter(c => !existing.has(c) && (!q || c.toLowerCase().includes(q)))
+  const existingIds = new Set(personLabels.value.map(p => p.id))
+  return store.allPeople
+    .filter(p => !existingIds.has(p.id) && (!q || p.display_name.toLowerCase().includes(q)))
     .slice(0, 8)
 })
 
@@ -733,8 +733,9 @@ async function startAddCollab() {
 }
 
 async function commitCollab(name) {
-  const trimmed = name.trim()
-  if (trimmed && !personLabels.value.includes(trimmed)) {
+  const trimmed = typeof name === 'string' ? name.trim() : name?.display_name?.trim() ?? ''
+  const alreadyAdded = personLabels.value.some(p => p.display_name.toLowerCase() === trimmed.toLowerCase())
+  if (trimmed && !alreadyAdded) {
     await store.addCollaborator(projectId.value, trimmed).catch(console.error)
   }
   cancelAddCollab()
@@ -745,8 +746,8 @@ function cancelAddCollab() {
   collabQuery.value = ''
 }
 
-async function removeCollab(name) {
-  await store.removeCollaborator(projectId.value, name).catch(console.error)
+async function removeCollab(personId) {
+  await store.removeCollaborator(projectId.value, personId).catch(console.error)
 }
 
 // Close popups on outside click

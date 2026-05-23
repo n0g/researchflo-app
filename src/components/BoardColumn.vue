@@ -50,7 +50,7 @@ const projects = computed(() => {
   if (store.activeFilter) {
     const { type, value } = store.activeFilter
     list = list.filter(p => {
-      if (type === 'person') return (p.collaborators || []).includes(value)
+      if (type === 'person') return (p.members || []).some(m => m.person?.display_name === value)
       if (type === 'venue') return p.venue === value
       return true
     })

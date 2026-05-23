@@ -123,7 +123,7 @@ const scheduledHoursThisWeek = computed(() => {
 })
 
 const statusText = computed(() => props.project.status_text || '')
-const personLabels = computed(() => props.project.collaborators || [])
+const personLabels = computed(() => (props.project.members || []).map(m => m.person?.display_name).filter(Boolean))
 
 const staleDays = computed(() => {
   const ts = props.project.updated_at || props.project.created_at

@@ -30,11 +30,19 @@ export const useBoardStore = defineStore('board', () => {
   const displayProjects = computed(() => projects.value)
   const inboxProjectId = computed(() => null)
 
-  const allCollaborators = computed(() => {
-    const people = new Set()
-    displayProjects.value.forEach(p => (p.collaborators || []).forEach(c => people.add(c)))
-    return [...people].sort()
+  const allPeople = computed(() => {
+    const map = new Map()
+    for (const p of projects.value) {
+      for (const m of (p.members || [])) {
+        if (m.person && !map.has(m.person.id)) map.set(m.person.id, m.person)
+      }
+    }
+    return [...map.values()]
   })
+
+  const allCollaborators = computed(() =>
+    [...new Set(allPeople.value.map(p => p.display_name))].sort()
+  )
 
   const allVenues = computed(() => {
     const venues = new Set()
@@ -146,7 +154,7 @@ export const useBoardStore = defineStore('board', () => {
         { data: tasksData,    error: taskErr },
         { data: stagesData,   error: stageErr },
       ] = await Promise.all([
-        supabase.from('projects').select('*').order('name'),
+        supabase.from('projects').select('*, members:project_members(person:people(id, display_name, user_id, email, invite_token))').order('name'),
         supabase.from('tasks').select('*').eq('is_completed', false),
         supabase.from('stages').select('*'),
       ])
@@ -294,19 +302,52 @@ export const useBoardStore = defineStore('board', () => {
   async function addCollaborator(projectId, name) {
     const project = projects.value.find(p => p.id === projectId)
     if (!project) return
-    const newCollabs = [...new Set([...(project.collaborators || []), name])]
-    const { error } = await supabase.from('projects').update({ collaborators: newCollabs }).eq('id', projectId)
-    if (error) throw new Error(error.message)
-    project.collaborators = newCollabs
+    const trimmed = name.trim()
+    if (!trimmed) return
+    const { data: { user } } = await supabase.auth.getUser()
+    // Reuse existing person if name matches
+    let person = allPeople.value.find(p => p.display_name.toLowerCase() === trimmed.toLowerCase())
+    if (!person) {
+      const { data, error } = await supabase.from('people')
+        .insert({ display_name: trimmed, invited_by: user.id })
+        .select().single()
+      if (error) throw new Error(error.message)
+      person = data
+    }
+    const { error } = await supabase.from('project_members')
+      .insert({ project_id: projectId, person_id: person.id, added_by: user.id })
+    if (error && error.code !== '23505') throw new Error(error.message) // ignore duplicate
+    if (!project.members) project.members = []
+    if (!project.members.find(m => m.person?.id === person.id)) {
+      project.members.push({ person })
+    }
   }
 
-  async function removeCollaborator(projectId, name) {
+  async function removeCollaborator(projectId, personId) {
     const project = projects.value.find(p => p.id === projectId)
     if (!project) return
-    const newCollabs = (project.collaborators || []).filter(c => c !== name)
-    const { error } = await supabase.from('projects').update({ collaborators: newCollabs }).eq('id', projectId)
+    const { error } = await supabase.from('project_members')
+      .delete().eq('project_id', projectId).eq('person_id', personId)
     if (error) throw new Error(error.message)
-    project.collaborators = newCollabs
+    project.members = (project.members || []).filter(m => m.person?.id !== personId)
+  }
+
+  async function loadPendingCollaborators() {
+    const { data, error } = await supabase
+      .from('people')
+      .select('id, display_name, email, invite_token')
+      .is('user_id', null)
+    if (error) throw new Error(error.message)
+    return data || []
+  }
+
+  async function claimInvite(token) {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    await supabase.from('people')
+      .update({ user_id: user.id, joined_at: new Date().toISOString() })
+      .eq('invite_token', token)
+      .is('user_id', null)
   }
 
   async function cycleEnergy(projectId) {
@@ -344,8 +385,8 @@ export const useBoardStore = defineStore('board', () => {
     }).select().single()
     if (error) throw new Error(error.message)
 
-    await supabase.from('project_members').insert({ project_id: project.id, user_id: user.id, role: 'owner' })
-    projects.value.push(project)
+    // Owner access is granted via owner_id on the project; no project_members row needed for self
+    projects.value.push({ ...project, members: [] })
     return project
   }
 
@@ -496,7 +537,7 @@ export const useBoardStore = defineStore('board', () => {
     token, stages, projects, tasks, loading, lastUpdated, cardDragging,
     triageTaskIds, triageCurrentId, pendingScheduleTask, labels,
     activeFilter, stageLabels, displayProjects, inboxProjectId,
-    excludedSectionIds, deadlineSectionIds, allCollaborators, allVenues, setupStatus,
+    excludedSectionIds, deadlineSectionIds, allCollaborators, allVenues, allPeople, setupStatus,
     initStages, saveToken, saveStages, resetToken, loadData, loadIfStale,
     projectStage, projectStatusTask, projectMeta, projectTasks, projectDeadline,
     moveStage, completeTask, deleteTask, reorderTasks, quickAddTask, updateTaskDue,
@@ -507,5 +548,6 @@ export const useBoardStore = defineStore('board', () => {
     updateTaskTriage, createProject, deleteProject, setFilter,
     focusProjectIds, projectEnergy, cycleEnergy,
     addInboxTask, assignTaskToProject,
+    loadPendingCollaborators, claimInvite,
   }
 })
