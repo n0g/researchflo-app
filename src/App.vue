@@ -1,15 +1,21 @@
 <template>
   <f7-app v-bind="f7params">
-    <!-- Pre-auth: single view for token entry -->
-    <f7-view v-if="!store.token" main url="/" />
+    <!-- Loading auth state -->
+    <f7-view v-if="authStore.loading" main url="/" />
 
-    <!-- Authenticated: tab views -->
+    <!-- Not signed in to Supabase -->
+    <f7-view v-else-if="!authStore.user" main url="/login/" />
+
+    <!-- Signed in but no Todoist token yet -->
+    <f7-view v-else-if="!store.token" main url="/token/" />
+
+    <!-- Fully authenticated: tab views -->
     <template v-else>
       <f7-views tabs>
-        <f7-view id="view-board"    name="board"    tab tab-active url="/board/" />
-        <f7-view id="view-inbox"   name="inbox"   tab url="/inbox/" />
-        <f7-view id="view-schedule" name="schedule" tab url="/schedule/" />
-        <f7-view id="view-settings" name="settings" tab url="/settings/" />
+        <f7-view id="view-board"    name="board"    tab tab-active url="/board/"    :browser-history="false" />
+        <f7-view id="view-inbox"   name="inbox"   tab url="/inbox/"    :browser-history="false" />
+        <f7-view id="view-schedule" name="schedule" tab url="/schedule/" :browser-history="false" />
+        <f7-view id="view-settings" name="settings" tab url="/settings/" :browser-history="false" />
       </f7-views>
     </template>
   </f7-app>
@@ -19,6 +25,7 @@
 import { ref, watch, onMounted, nextTick } from 'vue'
 import routes from './routes.js'
 import { useBoardStore } from './stores/board.js'
+import { useAuthStore } from './stores/auth.js'
 import { useReviewsStore } from './stores/reviews.js'
 import { useCalendarStore } from './stores/calendar.js'
 import { useSettingsStore } from './stores/settings.js'
@@ -28,6 +35,7 @@ import { useAccentColor } from './composables/useAccentColor.js'
 useTheme()
 useAccentColor()
 
+const authStore = useAuthStore()
 const store = useBoardStore()
 const reviewsStore = useReviewsStore()
 const calStore = useCalendarStore()
@@ -57,6 +65,7 @@ watch(() => calStore.selectedCalendarId, (id) => {
 })
 
 onMounted(async () => {
+  await authStore.init()
   if (!store.token) { settingsLoaded.value = true; return }
 
   const settings = await settingsStore.load(store.token)

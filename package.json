@@ -8,6 +8,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.106.1",
     "framework7": "^8",
     "framework7-vue": "^8",
     "pinia": "^2",

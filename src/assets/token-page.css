@@ -1,5 +1,64 @@
 /* Token page and Setup page */
 
+/* ── LOGIN PAGE ── */
+.login-page .page-content {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  padding: 32px;
+}
+.login-screen {
+  width: 100%;
+  max-width: 380px;
+}
+.login-box {
+  border: 1px solid var(--border2);
+  padding: 36px 32px 32px;
+  background: var(--bg2);
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.login-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.login-logo-icon {
+  font-size: 32px;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.login-logo-name {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+.login-subtitle {
+  font-size: 14px;
+  color: var(--text2);
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+.login-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.login-btn {
+  width: 100%;
+  justify-content: center;
+  margin-top: 4px;
+  padding: 10px 14px;
+  font-size: 15px;
+}
+
+
 /* ── TOKEN SCREEN ── */
 .token-page .page-content {
   display: flex !important;
