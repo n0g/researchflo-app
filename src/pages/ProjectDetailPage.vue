@@ -676,7 +676,7 @@ async function loadSubmissionStatus() {
   submissionStatusError.value = null
   submissionStatusData.value = null
   try {
-    const paper = await fetchPaperStatus(site.url, pid, site.token, reviewsStore.proxyUrl)
+    const paper = await fetchPaperStatus(site.url, pid, site.token)
     if (!paper) { submissionStatusError.value = 'Paper not found'; return }
     submissionStatusData.value = {
       status: paper.status || (paper.submitted ? 'submitted' : 'not submitted'),

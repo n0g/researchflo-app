@@ -77,8 +77,6 @@ onMounted(async () => {
     settingsStore.save(store.token, 'stages', store.stages)
   if (!settings.hotcrp_sites && reviewsStore.sites.length)
     settingsStore.save(store.token, 'hotcrp_sites', reviewsStore.sites)
-  if (!settings.hotcrp_proxy && reviewsStore.proxyUrl)
-    settingsStore.save(store.token, 'hotcrp_proxy', reviewsStore.proxyUrl)
   if (!settings.gcal_calendar_id && calStore.selectedCalendarId && calStore.selectedCalendarId !== 'primary')
     settingsStore.save(store.token, 'gcal_calendar_id', calStore.selectedCalendarId)
 })

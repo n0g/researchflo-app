@@ -135,28 +135,7 @@
           <div class="settings-section">
             <div class="settings-section-title">Review Sites</div>
             <div class="settings-card">
-              <div class="settings-subsection-label">CORS Proxy</div>
-              <p class="settings-hint">
-                Browsers block direct HotCRP requests. Route them through a proxy.<br>
-                Use <code class="inline-code">https://corsproxy.io/?url=</code> for zero-setup.
-              </p>
-              <input
-                type="url"
-                v-model="proxyDraft"
-                placeholder="https://corsproxy.io/?url="
-                aria-label="Proxy URL"
-                @keydown.enter.prevent="saveProxy"
-              >
-              <div class="settings-actions" style="margin-top: 8px">
-                <button v-if="reviewsStore.proxyUrl" class="btn sm" @click="clearProxy">Clear</button>
-                <button class="btn sm primary" @click="saveProxy">Save</button>
-              </div>
-              <p v-if="reviewsStore.proxyUrl" class="settings-hint" style="margin-top: 8px; margin-bottom: 0">
-                Active: <code class="inline-code">{{ reviewsStore.proxyUrl }}</code>
-              </p>
-              <p v-else class="settings-hint warn" style="margin-top: 8px; margin-bottom: 0">No proxy set — fetches will fail due to CORS.</p>
-
-              <div class="settings-subsection-label" style="margin-top: 24px">Configured Sites</div>
+              <div class="settings-subsection-label">Configured Sites</div>
               <div v-if="!reviewsStore.sites.length" class="settings-empty">No sites configured yet.</div>
               <div v-else class="site-rows">
                 <div v-for="site in reviewsStore.sites" :key="site.id" class="site-row">
@@ -350,13 +329,6 @@ function saveStages() {
   boardStore.saveStages(stages)
 }
 
-// ── Proxy ──
-const proxyDraft = ref(reviewsStore.proxyUrl)
-watch(() => reviewsStore.proxyUrl, val => { proxyDraft.value = val })
-
-function saveProxy() { reviewsStore.saveProxy(proxyDraft.value) }
-function clearProxy() { proxyDraft.value = ''; reviewsStore.saveProxy('') }
-
 // ── Sites ──
 const newSiteUrl = ref('')
 const newSiteToken = ref('')
@@ -386,7 +358,6 @@ function disconnect() {
 
 
 onMounted(async () => {
-  proxyDraft.value = reviewsStore.proxyUrl
   if (rowsEl.value) initSortable(rowsEl.value, stageRows)
   document.addEventListener('click', closeIconPicker)
   try {
