@@ -47,14 +47,19 @@ Deno.serve(async (req) => {
   const rpId = Deno.env.get('WEBAUTHN_RP_ID') || 'localhost'
   const rpName = Deno.env.get('WEBAUTHN_RP_NAME') || 'researchflo'
 
+  // Fetch full user record via admin to ensure email is present
+  const { data: { user: fullUser } } = await admin.auth.admin.getUserById(user.id)
+  const userEmail = fullUser?.email || user.email || user.id
+  const userDisplayName = (fullUser?.user_metadata?.name as string) || fullUser?.email || userEmail
+
   const encoder = new TextEncoder()
   const options = await generateRegistrationOptions({
     rpName,
     rpID: rpId,
     user: {
       id: encoder.encode(user.id),
-      name: user.email || user.id,
-      displayName: (user.user_metadata?.name as string) || user.email || 'User',
+      name: userEmail,
+      displayName: userDisplayName,
     },
     attestationType: 'none',
     excludeCredentials: (existing || []).map((p) => ({
