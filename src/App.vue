@@ -49,6 +49,14 @@ import { registerPasskey, isPasskeySupported } from './lib/passkey.js'
 useTheme()
 useAccentColor()
 
+// Detect magic-link hash synchronously — before any child onMounted fires
+{
+  const hp = new URLSearchParams(window.location.hash.slice(1))
+  if (hp.get('type') === 'magiclink' || hp.get('type') === 'email') {
+    sessionStorage.setItem('magic_link_pending', '1')
+  }
+}
+
 const authStore = useAuthStore()
 const store = useBoardStore()
 const reviewsStore = useReviewsStore()
@@ -101,13 +109,8 @@ onMounted(async () => {
     window.history.replaceState({}, '', window.location.pathname)
   }
 
-  // Detect magic-link callback BEFORE clearing hash — Supabase reads it during init
-  const hashParams = new URLSearchParams(window.location.hash.slice(1))
-  const fromMagicLink = hashParams.get('type') === 'magiclink' || hashParams.get('type') === 'email'
-  if (fromMagicLink) {
-    // Signal LoginPage to skip the auto-try passkey popup during this load
-    sessionStorage.setItem('magic_link_pending', '1')
-  }
+  // Read fromMagicLink from the flag set synchronously at script-setup time
+  const fromMagicLink = sessionStorage.getItem('magic_link_pending') === '1'
 
   await authStore.init()
 
