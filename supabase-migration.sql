@@ -1,10 +1,14 @@
 -- ============================================================
 -- Collaboration system migration
--- Run this in your Supabase SQL editor (or supabase db push)
+-- Run this in your Supabase SQL editor
+-- Safe to run even if project_members already exists
 -- ============================================================
 
--- 1. People table (decoupled from auth.users)
-CREATE TABLE public.people (
+-- 1. Drop old project_members (schema change: user_id → person_id)
+DROP TABLE IF EXISTS public.project_members CASCADE;
+
+-- 2. People table (decoupled from auth.users)
+CREATE TABLE IF NOT EXISTS public.people (
   id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   display_name text NOT NULL,
   email        text UNIQUE,
@@ -16,7 +20,7 @@ CREATE TABLE public.people (
   created_at   timestamptz DEFAULT now()
 );
 
--- 2. Project members
+-- 3. Project members (new schema)
 CREATE TABLE public.project_members (
   project_id  uuid REFERENCES public.projects(id) ON DELETE CASCADE,
   person_id   uuid REFERENCES public.people(id) ON DELETE CASCADE,
@@ -26,11 +30,11 @@ CREATE TABLE public.project_members (
   PRIMARY KEY (project_id, person_id)
 );
 
--- 3. Enable RLS
+-- 4. Enable RLS
 ALTER TABLE public.people ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.project_members ENABLE ROW LEVEL SECURITY;
 
--- 4. SECURITY DEFINER function (bypasses RLS to avoid recursion)
+-- 5. SECURITY DEFINER functions (bypass RLS to avoid recursion)
 CREATE OR REPLACE FUNCTION public.can_access_project(pid uuid)
 RETURNS boolean LANGUAGE sql SECURITY DEFINER STABLE AS $$
   SELECT
@@ -42,18 +46,22 @@ RETURNS boolean LANGUAGE sql SECURITY DEFINER STABLE AS $$
     );
 $$;
 
--- Update is_project_owner to use can_access_project
 CREATE OR REPLACE FUNCTION public.is_project_owner(pid uuid)
 RETURNS boolean LANGUAGE sql SECURITY DEFINER STABLE AS $$
   SELECT public.can_access_project(pid);
 $$;
 
--- 5. Update projects_select to allow members too
+-- 6. Update projects_select to allow members too
 DROP POLICY IF EXISTS "projects_select" ON public.projects;
 CREATE POLICY "projects_select" ON public.projects
   FOR SELECT USING (public.can_access_project(id));
 
--- 6. People policies
+-- 7. People policies
+DROP POLICY IF EXISTS "people_select"       ON public.people;
+DROP POLICY IF EXISTS "people_insert"       ON public.people;
+DROP POLICY IF EXISTS "people_update_own"   ON public.people;
+DROP POLICY IF EXISTS "people_claim_invite" ON public.people;
+
 CREATE POLICY "people_select" ON public.people
   FOR SELECT USING (
     user_id = auth.uid()
@@ -75,7 +83,11 @@ CREATE POLICY "people_claim_invite" ON public.people
   FOR UPDATE USING (invite_token IS NOT NULL AND user_id IS NULL)
   WITH CHECK (user_id = auth.uid());
 
--- 7. Project members policies
+-- 8. Project members policies
+DROP POLICY IF EXISTS "pm_select" ON public.project_members;
+DROP POLICY IF EXISTS "pm_insert" ON public.project_members;
+DROP POLICY IF EXISTS "pm_delete" ON public.project_members;
+
 CREATE POLICY "pm_select" ON public.project_members
   FOR SELECT USING (public.can_access_project(project_id));
 
@@ -89,7 +101,7 @@ CREATE POLICY "pm_delete" ON public.project_members
     EXISTS (SELECT 1 FROM public.projects WHERE id = project_id AND owner_id = auth.uid())
   );
 
--- 8. Auto-link people on signup
+-- 9. Auto-link people on signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
 BEGIN
@@ -116,7 +128,7 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
--- 9. Migrate existing collaborators text[] data
+-- 10. Migrate existing collaborators text[] data
 DO $$
 DECLARE
   p record;
@@ -147,5 +159,5 @@ BEGIN
   END LOOP;
 END $$;
 
--- 10. Drop old column
+-- 11. Drop old column
 ALTER TABLE public.projects DROP COLUMN IF EXISTS collaborators;
