@@ -150,7 +150,40 @@ async function main() {
   if (stagesErr) throw new Error(`Could not fetch stages: ${stagesErr.message}`)
   const stageByLabel = new Map(supStages.map(s => [`stage::${s.slug}`, s.id]))
 
-  console.log('📦 Migrating projects…')
+  // ── Migrate user settings ────────────────────────────────────────────────
+  console.log('⚙️  Migrating user settings…')
+  try {
+    const allProjectsForSettings = allProjects
+    const settingsProject = allProjectsForSettings.find(
+      p => !p.parent_id && (p.name === 'Settings' || p.name === 'Research Runway Settings')
+    )
+    if (settingsProject) {
+      const settingsTasks = await tGetAll(`/tasks?project_id=${settingsProject.id}`)
+      const settingsTask = settingsTasks.find(t => t.content === 'app-settings') ?? settingsTasks[0] ?? null
+      if (settingsTask?.description) {
+        const parsed = JSON.parse(settingsTask.description)
+        const { error: settingsErr } = await supabase.from('user_settings').upsert({
+          user_id: USER_ID,
+          stages: parsed.stages ?? null,
+          hotcrp_sites: parsed.hotcrp_sites ?? null,
+          hotcrp_proxy: parsed.hotcrp_proxy ?? null,
+        }, { onConflict: 'user_id', ignoreDuplicates: false })
+        if (settingsErr) {
+          console.error(`   ✗ Settings upsert failed: ${settingsErr.message}`)
+        } else {
+          console.log(`   ✓ stages, hotcrp_sites, hotcrp_proxy`)
+        }
+      } else {
+        console.log('   (no app-settings task found — skipping)')
+      }
+    } else {
+      console.log('   (no Settings project found — skipping)')
+    }
+  } catch (e) {
+    console.warn('   (settings migration failed:', e.message + ')')
+  }
+
+  console.log('\n📦 Migrating projects…')
 
   for (const project of researchProjects) {
     console.log(`\n  ${project.name}`)
