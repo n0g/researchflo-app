@@ -14,6 +14,7 @@ export const useAuthStore = defineStore('auth', () => {
   const stored = readStoredSession()
   const user = ref(stored?.user ?? null)
   const session = ref(stored ?? null)
+  const initialized = ref(false)
   // Set to true after a magic-link sign-in so App.vue can prompt passkey registration
   const pendingPasskeySetup = ref(false)
 
@@ -24,6 +25,8 @@ export const useAuthStore = defineStore('auth', () => {
       user.value = data.session?.user ?? null
     } catch (e) {
       console.error('Auth init failed:', e)
+    } finally {
+      initialized.value = true
     }
 
     supabase.auth.onAuthStateChange((_, s) => {
@@ -45,5 +48,5 @@ export const useAuthStore = defineStore('auth', () => {
     await supabase.auth.signOut()
   }
 
-  return { user, session, pendingPasskeySetup, init, signOut }
+  return { user, session, initialized, pendingPasskeySetup, init, signOut }
 })

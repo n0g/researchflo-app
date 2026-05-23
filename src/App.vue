@@ -1,7 +1,7 @@
 <template>
   <f7-app v-bind="f7params">
-    <!-- Exchanging magic-link token — show nothing until session resolves -->
-    <div v-if="exchangingMagicLink" class="app-boot" />
+    <!-- Show nothing until auth is resolved (prevents passkey popup on magic-link load) -->
+    <div v-if="!authStore.initialized" class="app-boot" />
 
     <!-- Not signed in -->
     <f7-view v-else-if="!authStore.user" main url="/login/" />
@@ -53,18 +53,6 @@ useTheme()
 useAccentColor()
 
 const authStore = useAuthStore()
-
-// Detect auth callbacks synchronously so the template can suppress LoginPage
-// while we exchange the token — prevents the passkey popup from appearing.
-// PKCE flow: ?code= in query string. Implicit flow: #type=magiclink in hash.
-const exchangingMagicLink = ref(false)
-{
-  const sp = new URLSearchParams(window.location.search)
-  const hp = new URLSearchParams(window.location.hash.slice(1))
-  if (sp.has('code') || hp.get('type') === 'magiclink' || hp.get('type') === 'email') {
-    exchangingMagicLink.value = true
-  }
-}
 const store = useBoardStore()
 const reviewsStore = useReviewsStore()
 const calStore = useCalendarStore()
@@ -116,25 +104,24 @@ onMounted(async () => {
     window.history.replaceState({}, '', window.location.pathname)
   }
 
+  // Detect auth callback before clearing URL (hash = implicit, ?code = PKCE)
+  const hadAuthCallback = !!window.location.hash || new URLSearchParams(window.location.search).has('code')
+
   await authStore.init()
 
-  // Clear auth callback params after Supabase has exchanged the tokens
-  if (window.location.hash || new URLSearchParams(window.location.search).has('code')) {
+  if (hadAuthCallback) {
     window.history.replaceState({}, '', window.location.pathname)
   }
 
-  const fromMagicLink = exchangingMagicLink.value
-  exchangingMagicLink.value = false
-
-  // Claim pending invite if user is already signed in
+  // Claim pending invite if user is signed in
   const pendingInvite = localStorage.getItem('pending_invite_token')
   if (pendingInvite && authStore.user) {
     localStorage.removeItem('pending_invite_token')
     await store.claimInvite(pendingInvite).catch(console.error)
   }
 
-  // Prompt passkey registration after magic-link sign-in
-  if (fromMagicLink && authStore.user && passkeySupported) {
+  // Prompt passkey registration after any auth callback sign-in
+  if (hadAuthCallback && authStore.user && passkeySupported) {
     authStore.pendingPasskeySetup = true
   }
 
