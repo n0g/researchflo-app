@@ -20,7 +20,9 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function init() {
     try {
-      const { data } = await supabase.auth.getSession()
+      console.log('[auth] init: href=', window.location.href)
+      const { data, error } = await supabase.auth.getSession()
+      console.log('[auth] getSession result:', { session: data.session, error })
       session.value = data.session
       user.value = data.session?.user ?? null
     } catch (e) {
