@@ -2,7 +2,7 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
 
-const BASE = '/research-org-board-app/'
+const BASE = '/researchflo-app/'
 
 export default defineConfig(({ command }) => ({
   base: command === 'build' ? BASE : '/',
