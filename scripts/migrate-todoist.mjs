@@ -196,13 +196,16 @@ async function main() {
     const summaryTask  = activeTasks.find(t => t.section_id === summarySec.get(project.id))
     const submTask     = activeTasks.find(t => t.section_id === submSec.get(project.id))
 
-    let stageId = null, statusText = '', energy = 0
+    let stageId = null, statusText = '', energy = 0, collaborators = []
     if (statusTask) {
       const stageLabel = (statusTask.labels || []).find(l => STAGE_LABELS.has(l))
       stageId = stageLabel ? (stageByLabel.get(stageLabel) ?? null) : null
       statusText = statusTask.content || ''
       const lbs = statusTask.labels || []
       energy = lbs.includes(ENERGY_HIGH) ? 2 : lbs.includes(ENERGY_LOW) ? 1 : 0
+      collaborators = lbs
+        .filter(l => l.startsWith('person::'))
+        .map(l => l.slice('person::'.length))
     }
 
     const venue       = deadlineTask?.content?.trim() || ''
@@ -210,7 +213,7 @@ async function main() {
     const summary     = summaryTask?.content?.trim() || ''
     const submissionUrl = submTask?.content?.trim() || ''
 
-    console.log(`    stage: ${stageId ? stageByLabel.has([...stageByLabel.entries()].find(([,v]) => v === stageId)?.[0] ?? '') ? 'mapped' : 'mapped' : 'none'}  venue: ${venue || '—'}  deadline: ${deadline || '—'}`)
+    console.log(`    stage: ${stageId ? 'mapped' : 'none'}  venue: ${venue || '—'}  deadline: ${deadline || '—'}  collaborators: ${collaborators.join(', ') || '—'}`)
 
     // ── Insert project row ──
     const { data: inserted, error: projErr } = await supabase
@@ -225,6 +228,7 @@ async function main() {
         summary,
         submission_url: submissionUrl,
         energy,
+        collaborators,
       })
       .select('id')
       .single()
