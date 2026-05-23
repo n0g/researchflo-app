@@ -1,7 +1,10 @@
 <template>
   <f7-app v-bind="f7params">
+    <!-- Exchanging magic-link token — show nothing until session resolves -->
+    <div v-if="exchangingMagicLink" class="app-boot" />
+
     <!-- Not signed in -->
-    <f7-view v-if="!authStore.user" main url="/login/" />
+    <f7-view v-else-if="!authStore.user" main url="/login/" />
 
     <!-- Signed in: tab views -->
     <template v-else>
@@ -49,15 +52,17 @@ import { registerPasskey, isPasskeySupported } from './lib/passkey.js'
 useTheme()
 useAccentColor()
 
-// Detect magic-link hash synchronously — before any child onMounted fires
+const authStore = useAuthStore()
+
+// Detect magic-link hash synchronously so the template can suppress LoginPage
+// while we exchange the token — prevents the passkey popup from appearing.
+const exchangingMagicLink = ref(false)
 {
   const hp = new URLSearchParams(window.location.hash.slice(1))
   if (hp.get('type') === 'magiclink' || hp.get('type') === 'email') {
-    sessionStorage.setItem('magic_link_pending', '1')
+    exchangingMagicLink.value = true
   }
 }
-
-const authStore = useAuthStore()
 const store = useBoardStore()
 const reviewsStore = useReviewsStore()
 const calStore = useCalendarStore()
@@ -109,15 +114,15 @@ onMounted(async () => {
     window.history.replaceState({}, '', window.location.pathname)
   }
 
-  // Read fromMagicLink from the flag set synchronously at script-setup time
-  const fromMagicLink = sessionStorage.getItem('magic_link_pending') === '1'
-
   await authStore.init()
 
   // Clear hash only after Supabase has had a chance to exchange the tokens
   if (window.location.hash) {
     window.history.replaceState({}, '', window.location.pathname + window.location.search)
   }
+
+  const fromMagicLink = exchangingMagicLink.value
+  exchangingMagicLink.value = false
 
   // Claim pending invite if user is already signed in
   const pendingInvite = localStorage.getItem('pending_invite_token')
