@@ -12,7 +12,8 @@ function _queueTaskSync(taskId) { const q = _getSyncQueue(); q.add(String(taskId
 function _dequeueTaskSync(taskId) { const q = _getSyncQueue(); q.delete(String(taskId)); _saveSyncQueue(q) }
 
 const GOOGLE_CLIENT_ID = '809750411186-1315ibr7ag630sbdkd42kt2cojlflqr6.apps.googleusercontent.com'
-const GCAL_REDIRECT_URI = 'https://oqqevpkeqcbkqrgabpkc.supabase.co/functions/v1/google-calendar-auth'
+const GCAL_REDIRECT_URI = 'https://researchflo.app'
+const EDGE_AUTH_URL = 'https://oqqevpkeqcbkqrgabpkc.supabase.co/functions/v1/google-calendar-auth'
 const EDGE_TOKEN_URL = 'https://oqqevpkeqcbkqrgabpkc.supabase.co/functions/v1/google-calendar-token'
 const SCOPES = 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly'
 
@@ -74,10 +75,33 @@ export const useCalendarStore = defineStore('calendar', () => {
   // Check OAuth callback params and verify connection on startup
   async function init() {
     const params = new URLSearchParams(window.location.search)
-    if (params.has('gcal_connected')) {
+    if (params.has('code')) {
+      const code = params.get('code')
+      const returnedState = params.get('state')
+      const expectedCsrf = sessionStorage.getItem('gcal_csrf')
+      sessionStorage.removeItem('gcal_csrf')
       window.history.replaceState({}, '', window.location.pathname)
-      const token = await _ensureToken()
-      if (token) await fetchCalendarList()
+      if (expectedCsrf && returnedState !== expectedCsrf) {
+        connectError.value = 'csrf_mismatch'
+        return
+      }
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) { connectError.value = 'not_signed_in'; return }
+        const res = await fetch(EDGE_AUTH_URL, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code }),
+        })
+        if (res.ok) {
+          await _ensureToken()
+          await fetchCalendarList()
+        } else {
+          connectError.value = 'token_exchange_failed'
+        }
+      } catch {
+        connectError.value = 'connection_failed'
+      }
     } else if (params.has('gcal_error')) {
       connectError.value = params.get('gcal_error')
       window.history.replaceState({}, '', window.location.pathname)
@@ -87,11 +111,13 @@ export const useCalendarStore = defineStore('calendar', () => {
     }
   }
 
-  // Redirect to Google OAuth — Edge Function handles the callback
+  // Redirect to Google OAuth — app receives callback, POSTs code to Edge Function
   async function connect() {
     connectError.value = ''
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) { connectError.value = 'Not signed in'; return }
+    const csrf = crypto.randomUUID()
+    sessionStorage.setItem('gcal_csrf', csrf)
     const params = new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID,
       redirect_uri: GCAL_REDIRECT_URI,
@@ -99,7 +125,7 @@ export const useCalendarStore = defineStore('calendar', () => {
       scope: SCOPES,
       access_type: 'offline',
       prompt: 'consent',
-      state: session.access_token,
+      state: csrf,
     })
     window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`
   }

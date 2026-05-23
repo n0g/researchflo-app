@@ -1,21 +1,36 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const GOOGLE_CLIENT_ID = '809750411186-1315ibr7ag630sbdkd42kt2cojlflqr6.apps.googleusercontent.com'
-const REDIRECT_URI = 'https://oqqevpkeqcbkqrgabpkc.supabase.co/functions/v1/google-calendar-auth'
-const APP_URL = 'https://researchflo.app'
+const REDIRECT_URI = 'https://researchflo.app'
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, content-type',
+}
 
 Deno.serve(async (req) => {
-  const url = new URL(req.url)
-  const code = url.searchParams.get('code')
-  const state = url.searchParams.get('state') // Supabase access token passed as state
-  const error = url.searchParams.get('error')
-
-  if (error) {
-    return Response.redirect(`${APP_URL}?gcal_error=${encodeURIComponent(error)}`)
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: CORS_HEADERS })
   }
 
-  if (!code || !state) {
-    return new Response('Missing code or state', { status: 400 })
+  const authHeader = req.headers.get('Authorization')
+  if (!authHeader) {
+    return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401, headers: CORS_HEADERS })
+  }
+
+  // Verify the Supabase JWT and get user
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_ANON_KEY')!,
+    { global: { headers: { Authorization: authHeader } } }
+  )
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+  if (userError || !user) {
+    return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401, headers: CORS_HEADERS })
+  }
+
+  const { code } = await req.json()
+  if (!code) {
+    return new Response(JSON.stringify({ error: 'missing_code' }), { status: 400, headers: CORS_HEADERS })
   }
 
   // Exchange auth code for tokens
@@ -33,21 +48,10 @@ Deno.serve(async (req) => {
 
   if (!tokenRes.ok) {
     console.error('Token exchange failed:', await tokenRes.text())
-    return Response.redirect(`${APP_URL}?gcal_error=token_exchange_failed`)
+    return new Response(JSON.stringify({ error: 'token_exchange_failed' }), { status: 500, headers: CORS_HEADERS })
   }
 
   const tokens = await tokenRes.json()
-
-  // Verify state is a valid Supabase JWT
-  const supabase = createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_ANON_KEY')!,
-    { global: { headers: { Authorization: `Bearer ${state}` } } }
-  )
-  const { data: { user }, error: userError } = await supabase.auth.getUser()
-  if (userError || !user) {
-    return Response.redirect(`${APP_URL}?gcal_error=invalid_session`)
-  }
 
   // Store tokens using service role to bypass RLS
   const admin = createClient(
@@ -61,5 +65,8 @@ Deno.serve(async (req) => {
     gcal_token_expires_at: Date.now() + tokens.expires_in * 1000,
   })
 
-  return Response.redirect(`${APP_URL}?gcal_connected=1`)
+  return new Response(
+    JSON.stringify({ ok: true }),
+    { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } }
+  )
 })
