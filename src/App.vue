@@ -64,6 +64,7 @@ watch(() => calStore.selectedCalendarId, (id) => {
 
 onMounted(async () => {
   await authStore.init()
+  calStore.init().catch(() => {})
   if (!store.token) { settingsLoaded.value = true; return }
 
   const settings = await settingsStore.load(store.token)
