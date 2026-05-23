@@ -341,6 +341,53 @@ html[data-theme="dark"] .settings-sheet {
   color: var(--text3);
   padding: 8px 0;
 }
+
+.settings-inline-input {
+  flex: 1;
+  max-width: 220px;
+  font-size: 13px;
+  padding: 5px 9px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text);
+  font-family: var(--font);
+}
+
+.collab-invite-rows { display: flex; flex-direction: column; }
+.collab-invite-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+}
+.collab-invite-row:last-child { border-bottom: none; }
+.collab-invite-name { font-size: 13px; font-weight: 500; min-width: 90px; white-space: nowrap; }
+.collab-invite-email {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg2);
+  color: var(--text);
+  font-family: var(--font);
+}
+.collab-invite-copy {
+  flex-shrink: 0;
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text2);
+  cursor: pointer;
+  font-size: 15px;
+  font-family: var(--font);
+}
+.collab-invite-copy:hover { color: var(--text); background: var(--bg2); }
 .settings-actions {
   display: flex;
   justify-content: flex-end;

@@ -341,6 +341,24 @@ export const useBoardStore = defineStore('board', () => {
     return data || []
   }
 
+  async function loadMyProfile() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return null
+    const { data } = await supabase.from('people').select('id, display_name, email').eq('user_id', user.id).single()
+    return data
+  }
+
+  async function saveMyDisplayName(name) {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    await supabase.from('people').update({ display_name: name.trim() }).eq('user_id', user.id)
+  }
+
+  async function savePersonEmail(personId, email) {
+    const { error } = await supabase.from('people').update({ email: email.trim() || null }).eq('id', personId)
+    if (error) throw new Error(error.message)
+  }
+
   async function claimInvite(token) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
@@ -548,6 +566,6 @@ export const useBoardStore = defineStore('board', () => {
     updateTaskTriage, createProject, deleteProject, setFilter,
     focusProjectIds, projectEnergy, cycleEnergy,
     addInboxTask, assignTaskToProject,
-    loadPendingCollaborators, claimInvite,
+    loadPendingCollaborators, claimInvite, loadMyProfile, saveMyDisplayName, savePersonEmail,
   }
 })

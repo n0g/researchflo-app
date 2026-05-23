@@ -114,16 +114,26 @@
           <div class="settings-section">
             <div class="settings-section-title">Collaborators</div>
             <div class="settings-card">
-              <p class="settings-hint">People in your projects who haven't joined yet. Send them an invite link to create an account.</p>
+              <p class="settings-hint">People in your projects who haven't joined yet. Add their email and copy the invite link to send them.</p>
               <div v-if="!pendingCollaborators.length" class="settings-empty">Everyone is already on the platform.</div>
-              <div v-else class="site-rows">
-                <div v-for="person in pendingCollaborators" :key="person.id" class="site-row">
-                  <div class="site-info">
-                    <div class="site-name-text">{{ person.display_name }}</div>
-                    <div v-if="person.email" class="site-url-text">{{ person.email }}</div>
-                  </div>
-                  <button class="btn sm" @click="copyInviteLink(person)">
-                    {{ inviteCopied === person.id ? 'Copied!' : 'Copy invite link' }}
+              <div v-else class="collab-invite-rows">
+                <div v-for="person in pendingCollaborators" :key="person.id" class="collab-invite-row">
+                  <span class="collab-invite-name">{{ person.display_name }}</span>
+                  <input
+                    class="collab-invite-email"
+                    type="email"
+                    :value="person.email || ''"
+                    placeholder="email address"
+                    @change="onEmailChange(person, $event.target.value)"
+                    @keydown.enter.prevent="$event.target.blur()"
+                  />
+                  <button
+                    class="collab-invite-copy"
+                    :title="inviteCopied === person.id ? 'Copied!' : 'Copy invite link'"
+                    :aria-label="inviteCopied === person.id ? 'Copied!' : 'Copy invite link'"
+                    @click="copyInviteLink(person)"
+                  >
+                    <i :class="inviteCopied === person.id ? 'ph ph-check' : 'ph ph-link-simple'" aria-hidden="true"></i>
                   </button>
                 </div>
               </div>
@@ -243,6 +253,17 @@
           <div class="settings-section">
             <div class="settings-section-title">Account</div>
             <div class="settings-row-group">
+              <div class="settings-row">
+                <span class="settings-row-label">Display name</span>
+                <input
+                  type="text"
+                  class="settings-inline-input"
+                  :value="displayName"
+                  placeholder="Your name"
+                  @change="onDisplayNameChange($event.target.value)"
+                  @keydown.enter.prevent="$event.target.blur()"
+                />
+              </div>
               <div class="settings-row">
                 <span class="settings-row-label">Signed in</span>
                 <button class="btn sm danger" @click="signOut">Sign out</button>
@@ -366,8 +387,27 @@ function copyInviteLink(person) {
   setTimeout(() => { inviteCopied.value = null }, 2000)
 }
 
+async function onEmailChange(person, value) {
+  await boardStore.savePersonEmail(person.id, value).catch(console.error)
+  person.email = value.trim() || null
+}
+
 // ── Account ──
 const authStore = useAuthStore()
+const displayName = ref('')
+
+async function loadDisplayName() {
+  const profile = await boardStore.loadMyProfile().catch(() => null)
+  if (profile) displayName.value = profile.display_name || ''
+}
+
+async function onDisplayNameChange(value) {
+  const trimmed = value.trim()
+  if (!trimmed) return
+  displayName.value = trimmed
+  await boardStore.saveMyDisplayName(trimmed).catch(console.error)
+}
+
 function signOut() { authStore.signOut() }
 
 
@@ -376,6 +416,7 @@ onMounted(async () => {
   if (rowsEl.value) initSortable(rowsEl.value, stageRows)
   document.addEventListener('click', closeIconPicker)
   loadPending()
+  loadDisplayName()
 })
 
 onUnmounted(() => {
