@@ -145,20 +145,21 @@ export async function registerPasskey() {
 
   let cred
   try {
-    cred = await navigator.credentials.create({
-      publicKey: {
-        ...options,
-        challenge: b64urlToBuffer(options.challenge),
-        user: {
-          ...options.user,
-          id: b64urlToBuffer(options.user.id),
-        },
-        excludeCredentials: (options.excludeCredentials || []).map((c) => ({
-          ...c,
-          id: b64urlToBuffer(c.id),
-        })),
+    const publicKeyOptions = {
+      ...options,
+      challenge: b64urlToBuffer(options.challenge),
+      user: {
+        id: b64urlToBuffer(options.user.id),
+        name: options.user.name || options.user.displayName || 'user',
+        displayName: options.user.displayName || options.user.name || 'User',
       },
-    })
+      excludeCredentials: (options.excludeCredentials || []).map((c) => ({
+        ...c,
+        id: b64urlToBuffer(c.id),
+      })),
+    }
+    console.log('[passkey] register options.user:', JSON.stringify(options.user))
+    cred = await navigator.credentials.create({ publicKey: publicKeyOptions })
   } catch (err) {
     if (err.name === 'NotAllowedError') throw new Error('cancelled')
     throw err
