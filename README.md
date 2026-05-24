@@ -1,83 +1,122 @@
-# Research Board
+# researchflo
 
-A PWA that turns your Todoist research projects into a Kanban pipeline board. Designed for academic researchers who want a live overview of all their projects across writing, submission, revision, and review stages — on desktop, tablet, and mobile.
+A self-hosted PWA for academic researchers to track research projects across a customizable pipeline — from planning through submission and revision. Designed to be the one-screen overview you open in meetings and sprint planning sessions.
 
-## What it does
+Built with Vue 3, Supabase, and Framework7. Runs on GitHub Pages with a Supabase backend.
 
-- **Pipeline board** — one column per stage (Planning → Data Collection → Preparing → Revision → Awaiting Reviews → On Ice). Projects move between stages by updating a label in Todoist.
-- **Project detail** — tap any card to open a split-panel view: metadata on the left (collaborators, status, venue, deadline, submission link, summary), task list on the right.
-- **Task management** — view and complete open tasks per project; quick-add new tasks inline.
-- **Stale indicator** — cards whose status hasn't been updated in more than 14 days show a `!` badge.
-- **HotCRP integration** — if a project has a submission URL pointing to a configured HotCRP instance, the app fetches and displays the submission status (draft / submitted / accepted / rejected) on both the card and the detail page.
-- **Settings sync** — stage configuration and HotCRP settings are synced to a Todoist project so they follow you across devices.
-- **PWA** — installable on Mac, iPad, and iPhone; works offline using the last cached data.
+## Features
 
-## Todoist setup
+### Pipeline board
+Kanban board with one column per stage. Default stages: Planning → Data Collection → Preparing → Revision → Awaiting Reviews → On Ice. Stages are fully configurable per user. Drag projects between columns to move them through the pipeline.
 
-The app expects a specific structure in Todoist. You need to set this up once before using the app.
+### Project detail
+Tap any card to open a split-panel view. Left pane: metadata (status, collaborators, venue, deadline, submission URL, energy level, summary). Right pane: task list with quick-add, due dates, and priority.
 
-### 1. Create a "Research" project
+### Task inbox & triage
+Tasks not assigned to a project land in the Inbox. Drag to reorder. Triage tasks by urgency and time estimate before execution.
 
-Create a top-level Todoist project named exactly **Research**. All your research sub-projects live inside it.
+### Schedule
+Calendar view for scheduling tasks to specific time slots. Integrates with Google Calendar.
 
-### 2. Create stage labels
+### Collaboration
+Invite collaborators to projects by name. Add their email address in Settings and send them an invite — they receive a sign-in link that automatically claims their spot.
 
-Create Todoist labels with these exact names (or configure custom ones in the app):
+### Authentication
+- **Passkeys** — Touch ID / Face ID via iCloud Keychain. No password needed after the first sign-in.
+- **Magic link** — fallback email sign-in for any device.
 
-| Stage            | Label                        |
-|------------------|------------------------------|
-| Planning         | `stage::planning`            |
-| Data Collection  | `stage::data-collection`     |
-| Preparing        | `stage::preparing-to-submit` |
-| Revision         | `stage::revision`            |
-| Awaiting Reviews | `stage::under-submission`    |
-| On Ice           | `stage::on-ice`              |
+### HotCRP integration (optional)
+Connect one or more HotCRP instances to display paper review status on project cards and in the detail view.
 
-### 3. Structure each research project
+### PWA
+Installable on iPhone, iPad, and Mac. Works offline using the last cached state. Optimized for both desktop (sidebar navigation) and mobile (bottom tab bar).
 
-Each sub-project under Research needs three sections:
+## Tech stack
 
-- **📌 Current Status** — one task whose label is the current stage label (e.g. `stage::preparing-to-submit`). Add collaborator names as additional labels on this task. The task content is the status description shown on the card.
-- **📌 Deadlines** — deadline tasks (excluded from the main task list).
-- **📌 Submission** — one task whose content is the HotCRP submission URL (optional).
+| Layer | Technology |
+|-------|-----------|
+| UI | Vue 3 + Pinia + Framework7 |
+| Build | Vite + vite-plugin-pwa |
+| Backend | Supabase (Postgres + Auth + Edge Functions) |
+| Hosting | GitHub Pages |
+| Auth | WebAuthn (passkeys) + Supabase magic link |
 
-Any other sections and tasks appear in the task list on the project detail page.
+## Deploying your own instance
 
-### 4. Create a settings project
+### Prerequisites
 
-Create a top-level Todoist project named exactly **Research Runway Settings**. The app uses this to sync your stage configuration and HotCRP settings across devices. You don't need to add anything to it manually.
+- [Supabase CLI](https://supabase.com/docs/guides/cli) (`brew install supabase/tap/supabase`)
+- A free [Supabase](https://supabase.com) account and project
+- A GitHub repository with Pages enabled
 
-## Deploy to GitHub Pages
+### 1. Fork and clone
 
-1. Fork or clone this repo, then push to your own GitHub account.
-2. Go to repo **Settings → Pages → Source**: `main` branch, `/ (root)`.
-3. Wait ~30 seconds for the first deploy.
-4. Visit `https://YOURNAME.github.io/REPONAME/`.
+```bash
+git clone https://github.com/YOUR_USERNAME/researchflo-app.git
+cd researchflo-app
+npm install
+```
 
-## Install as app
+### 2. Run the setup script
 
-**Mac (Chrome or Edge):** Address bar → install icon (⊕) → opens as a standalone window.  
-**iPad / iPhone:** Safari → Share → **Add to Home Screen**. Must use Safari — Chrome on iOS does not support PWA installation.
+```bash
+./scripts/setup.sh
+```
 
-## First-time setup
+The script will ask for your Supabase project ref and app domain, then:
+- Apply the database schema (`supabase db push`)
+- Deploy all edge functions
+- Set WebAuthn secrets
+- Write `.env.local` with your project keys
+- Print the remaining manual steps
 
-1. Get your Todoist API token: Todoist **Settings → Integrations → Developer**.
-2. Open the app and paste your token on the welcome screen.
-3. The board loads automatically. Stages use the default label mapping — change them via **Settings → Reconfigure stages** if needed.
+### 3. Manual steps in the Supabase dashboard
+
+**Authentication → Providers → Email**: enable **Magic Link**.
+
+**Authentication → URL Configuration**:
+- Site URL: `https://your-domain.com`
+- Redirect URLs: `https://your-domain.com/**`
+
+### 4. Add GitHub Actions secrets
+
+In your repo: **Settings → Secrets and variables → Actions**:
+
+| Secret | Value |
+|--------|-------|
+| `VITE_SUPABASE_URL` | From Supabase: Project Settings → API |
+| `VITE_SUPABASE_ANON_KEY` | From Supabase: Project Settings → API |
+
+Optional:
+
+| Secret | Value |
+|--------|-------|
+| `VITE_GCAL_CLIENT_ID` | Google OAuth client ID for Calendar integration |
+
+### 5. Deploy
+
+Push to `main`. GitHub Actions builds and deploys to Pages automatically (~1 minute).
+
+### 6. First sign-in
+
+1. Open the app and enter your email — you'll receive a magic link.
+2. After signing in, go to **Settings → Account → Add passkey** to set up Touch ID / Face ID for future logins.
+
+## Local development
+
+```bash
+cp .env.example .env.local
+# Fill in VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
+npm run dev
+```
+
+Edge functions run on Supabase's servers (no local emulation needed unless you install Docker).
 
 ## HotCRP setup (optional)
 
-If you review papers on a HotCRP instance, the app can show submission and review statuses.
+To show paper review statuses from a HotCRP conference system:
 
-1. **Set up a CORS proxy** — browsers can't call HotCRP directly. Deploy the Cloudflare Worker below, then paste the worker URL in **Settings → Reviews → CORS Proxy URL**.
-
-2. **Add your HotCRP site** — in **Settings → Reviews**, add your HotCRP base URL and API token (get it from your HotCRP profile page).
-
-3. **Add submission URLs** — in the project detail page, paste the full HotCRP paper URL (e.g. `https://your-conference.hotcrp.com/paper/42`) into the Submission field.
-
-### Cloudflare Worker (CORS proxy)
-
-Create a new Worker at [dash.cloudflare.com](https://dash.cloudflare.com) with this code:
+1. **Deploy a CORS proxy** — create a Cloudflare Worker with this code:
 
 ```js
 export default {
@@ -85,45 +124,35 @@ export default {
     const { searchParams } = new URL(request.url)
     const target = searchParams.get('url')
     const token = searchParams.get('token')
-
     if (!target) return new Response('Missing url param', { status: 400 })
-
     if (request.method === 'OPTIONS') {
-      return new Response(null, {
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET',
-          'Access-Control-Allow-Headers': '*',
-        }
-      })
+      return new Response(null, { headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET',
+        'Access-Control-Allow-Headers': '*',
+      }})
     }
-
-    const headers = {}
-    if (token) headers['Authorization'] = `Bearer ${token}`
-
+    const headers = token ? { Authorization: `Bearer ${token}` } : {}
     const response = await fetch(target, { headers })
-    const body = await response.text()
-
-    return new Response(body, {
+    return new Response(await response.text(), {
       status: response.status,
       headers: {
         'Content-Type': response.headers.get('Content-Type') || 'application/json',
         'Access-Control-Allow-Origin': '*',
-      }
+      },
     })
   }
 }
 ```
 
+2. In the app: **Settings → Review Sites** — add your proxy URL, HotCRP base URL, and API token (found in your HotCRP profile).
+
 ## Keyboard shortcuts
 
-| Key | Action         |
-|-----|----------------|
-| `R` | Refresh data   |
+| Key | Action |
+|-----|--------|
+| `R` | Refresh data |
 
-## Notes
+## Privacy
 
-- Your Todoist token is stored in browser `localStorage` and only ever sent to `api.todoist.com`.
-- The app works offline — the service worker caches the last loaded state.
-- Tapping the Todoist link in a project detail opens that project directly in the Todoist app.
-- Theme (light/dark/auto) and accent color are per-device and not synced.
+All data is stored in your own Supabase project. The app has no analytics, no third-party data sharing, and no external dependencies beyond the services you configure (Supabase, Google Calendar, HotCRP).
