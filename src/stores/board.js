@@ -26,6 +26,8 @@ export const useBoardStore = defineStore('board', () => {
   const _stageById = ref(new Map())
   // Per-user energy levels: projectId → 0|1|2
   const _userEnergy = ref(new Map())
+  // Per-user task schedule: taskId → { caldav_event_uid, caldav_calendar_id, scheduled_at }
+  const _taskSchedule = ref(new Map())
   // Current user's people.id — used for self-filter in collaborator lists
   const myPeopleId = ref(null)
 
@@ -83,14 +85,19 @@ export const useBoardStore = defineStore('board', () => {
     return [base, gcalLine, scheduledLine].filter(Boolean).join('\n')
   }
 
-  // Normalize a raw Supabase task row to match the shape components expect
-  function _transformTask(t) {
-    return {
+  // Normalize a raw Supabase task row to match the shape components expect.
+  // scheduleMap is passed during initial loadData(); otherwise falls back to the live _taskSchedule map.
+  function _transformTask(t, scheduleMap) {
+    const sched = (scheduleMap ?? _taskSchedule.value).get(t.id)
+    const withSched = {
       ...t,
       due: t.due_date ? { date: t.due_date } : null,
       order: t.sort_order ?? 0,
-      description: _buildTaskDescription(t),
+      caldav_event_uid: sched?.caldav_event_uid ?? null,
+      caldav_calendar_id: sched?.caldav_calendar_id ?? null,
+      scheduled_at: sched?.scheduled_at ?? null,
     }
+    return { ...withSched, description: _buildTaskDescription(withSched) }
   }
 
   // ── Filter ─────────────────────────────────────────────────────────────────
@@ -162,10 +169,12 @@ export const useBoardStore = defineStore('board', () => {
         { data: projectsData, error: projErr },
         { data: tasksData,    error: taskErr },
         { data: stagesData,   error: stageErr },
+        { data: scheduleData },
       ] = await Promise.all([
         supabase.from('projects').select('*, members:project_members(person:people(id, display_name, user_id, email, invite_token))').order('name'),
         supabase.from('tasks').select('*').eq('is_completed', false).order('sort_order', { ascending: true }),
         supabase.from('stages').select('*'),
+        supabase.from('task_schedule').select('task_id, caldav_event_uid, caldav_calendar_id, scheduled_at'),
       ])
 
       if (projErr)  console.error('[board] projects error:', JSON.stringify(projErr))
@@ -188,7 +197,12 @@ export const useBoardStore = defineStore('board', () => {
       }
 
       projects.value = projectsData || []
-      tasks.value = (tasksData || []).map(_transformTask)
+
+      // Build per-user schedule map before transforming tasks so virtual fields are populated
+      const scheduleMap = new Map()
+      for (const row of (scheduleData || [])) scheduleMap.set(row.task_id, row)
+      _taskSchedule.value = scheduleMap
+      tasks.value = (tasksData || []).map(t => _transformTask(t, scheduleMap))
 
       // Load per-user energy levels
       const { data: focusData } = await supabase.from('project_focus').select('project_id, energy')
@@ -578,10 +592,12 @@ export const useBoardStore = defineStore('board', () => {
   }
 
   async function saveGCalEvent(taskId, eventId, calId) {
-    const { error } = await supabase.from('tasks')
-      .update({ caldav_event_uid: eventId, caldav_calendar_id: calId })
-      .eq('id', taskId)
+    const { data: { user } } = await supabase.auth.getUser()
+    const existing = _taskSchedule.value.get(taskId) || {}
+    const row = { user_id: user.id, task_id: taskId, caldav_event_uid: eventId, caldav_calendar_id: calId, scheduled_at: existing.scheduled_at ?? null }
+    const { error } = await supabase.from('task_schedule').upsert(row, { onConflict: 'user_id,task_id' })
     if (error) throw new Error(error.message)
+    _taskSchedule.value = new Map(_taskSchedule.value).set(taskId, { ...existing, caldav_event_uid: eventId, caldav_calendar_id: calId })
     const task = tasks.value.find(t => t.id === taskId)
     if (task) {
       task.caldav_event_uid = eventId
@@ -593,29 +609,27 @@ export const useBoardStore = defineStore('board', () => {
   async function saveScheduledTime(taskId, isoDatetime) {
     const task = tasks.value.find(t => t.id === taskId)
     if (!task) return
-    const newLabels = [...(task.labels || [])]
-    if (!newLabels.includes('scheduled')) newLabels.push('scheduled')
-    const { error } = await supabase.from('tasks')
-      .update({ scheduled_at: isoDatetime, labels: newLabels })
-      .eq('id', taskId)
+    const { data: { user } } = await supabase.auth.getUser()
+    const existing = _taskSchedule.value.get(taskId) || {}
+    const row = { user_id: user.id, task_id: taskId, caldav_event_uid: existing.caldav_event_uid ?? null, caldav_calendar_id: existing.caldav_calendar_id ?? null, scheduled_at: isoDatetime }
+    const { error } = await supabase.from('task_schedule').upsert(row, { onConflict: 'user_id,task_id' })
     if (error) throw new Error(error.message)
+    _taskSchedule.value = new Map(_taskSchedule.value).set(taskId, { ...existing, scheduled_at: isoDatetime })
     task.scheduled_at = isoDatetime
-    task.labels = newLabels
     task.description = _buildTaskDescription(task)
   }
 
   async function clearScheduledTime(taskId) {
     const task = tasks.value.find(t => t.id === taskId)
     if (!task) return
-    const newLabels = (task.labels || []).filter(l => l !== 'scheduled')
-    const { error } = await supabase.from('tasks')
-      .update({ scheduled_at: null, caldav_event_uid: null, caldav_calendar_id: null, labels: newLabels })
-      .eq('id', taskId)
-    if (error) throw new Error(error.message)
+    const { data: { user } } = await supabase.auth.getUser()
+    await supabase.from('task_schedule').delete().eq('user_id', user.id).eq('task_id', taskId)
+    const newMap = new Map(_taskSchedule.value)
+    newMap.delete(taskId)
+    _taskSchedule.value = newMap
     task.scheduled_at = null
     task.caldav_event_uid = null
     task.caldav_calendar_id = null
-    task.labels = newLabels
     task.description = _buildTaskDescription(task)
   }
 
