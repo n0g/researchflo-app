@@ -87,7 +87,7 @@ Deno.serve(async (req) => {
 
     const rpId = Deno.env.get('WEBAUTHN_RP_ID') || 'localhost'
     const appUrl = rpId === 'localhost' ? 'http://localhost:3000' : `https://${rpId}`
-    const redirectTo = `${appUrl}/?invite=${tempPerson.invite_token}`
+    const redirectTo = `${appUrl}/?invite=${tempPerson.invite_token}&email=${encodeURIComponent(email.trim())}`
 
     const { error: inviteErr } = await admin.auth.admin.inviteUserByEmail(email.trim(), { redirectTo })
     if (inviteErr) {

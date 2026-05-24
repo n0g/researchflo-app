@@ -78,6 +78,8 @@ const emailEl = ref(null)
 const passkeyAvailable = ref(isPasskeySupported())
 
 const hasInvite = computed(() => !!localStorage.getItem('pending_invite_token'))
+const inviteEmail = localStorage.getItem('pending_invite_email') || ''
+if (inviteEmail) email.value = inviteEmail
 
 onMounted(async () => {
   // Invited users don't have passkeys yet — skip discoverable auth and go straight to the form.

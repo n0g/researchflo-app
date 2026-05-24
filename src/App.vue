@@ -81,6 +81,7 @@ watch(() => authStore.user, async (user, prev) => {
     const pendingInvite = localStorage.getItem('pending_invite_token')
     if (pendingInvite) {
       localStorage.removeItem('pending_invite_token')
+      localStorage.removeItem('pending_invite_email')
       await store.claimInvite(pendingInvite).catch(console.error)
     }
   }
@@ -118,10 +119,13 @@ function dismissPasskey() {
 }
 
 onMounted(async () => {
-  // Capture ?invite=TOKEN from URL before F7 boots (deep links don't work with browser-history: false)
-  const urlInvite = new URLSearchParams(window.location.search).get('invite')
+  // Capture ?invite=TOKEN and ?email= from URL before F7 boots
+  const _inviteParams = new URLSearchParams(window.location.search)
+  const urlInvite = _inviteParams.get('invite')
   if (urlInvite) {
     localStorage.setItem('pending_invite_token', urlInvite)
+    const urlInviteEmail = _inviteParams.get('email')
+    if (urlInviteEmail) localStorage.setItem('pending_invite_email', urlInviteEmail)
     window.history.replaceState({}, '', window.location.pathname)
   }
 
@@ -131,6 +135,7 @@ onMounted(async () => {
   const pendingInvite = localStorage.getItem('pending_invite_token')
   if (pendingInvite && authStore.user) {
     localStorage.removeItem('pending_invite_token')
+    localStorage.removeItem('pending_invite_email')
     await store.claimInvite(pendingInvite).catch(console.error)
   }
 
