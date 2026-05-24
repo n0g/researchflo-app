@@ -112,7 +112,7 @@
               @click="startEdit('status')"
               @keydown.enter.prevent="startEdit('status')"
               @keydown.space.prevent="startEdit('status')"
-            >{{ remoteDraft('status')?.value ?? statusText || 'Add a status…' }}</div>
+            >{{ (remoteDraft('status')?.value ?? statusText) || 'Add a status…' }}</div>
             <textarea
               v-else
               ref="statusTextareaEl"
@@ -175,7 +175,7 @@
                 @click="startEditVenue"
                 @keydown.enter.prevent="startEditVenue"
                 @keydown.space.prevent="startEditVenue"
-              >{{ remoteDraft('venue')?.value ?? venueText || 'Add venue…' }}</div>
+              >{{ (remoteDraft('venue')?.value ?? venueText) || 'Add venue…' }}</div>
               <input
                 v-else
                 ref="venueInputEl"
@@ -256,7 +256,7 @@
                 @click="startEditSubmission"
                 @keydown.enter.prevent="startEditSubmission"
                 @keydown.space.prevent="startEditSubmission"
-              >{{ remoteDraft('submission')?.value ?? submissionUrlDisplay || 'Add submission URL…' }}</div>
+              >{{ (remoteDraft('submission')?.value ?? submissionUrlDisplay) || 'Add submission URL…' }}</div>
               <input
                 v-else
                 ref="submissionInputEl"
@@ -315,7 +315,7 @@
               @click="startEdit('summary')"
               @keydown.enter.prevent="startEdit('summary')"
               @keydown.space.prevent="startEdit('summary')"
-            >{{ remoteDraft('summary')?.value ?? summaryText || 'Add a summary…' }}</div>
+            >{{ (remoteDraft('summary')?.value ?? summaryText) || 'Add a summary…' }}</div>
             <textarea
               v-else
               ref="summaryTextareaEl"
@@ -920,6 +920,8 @@ function _setupChannel() {
   ch.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'projects', filter: `id=eq.${pid}` },
     ({ new: n }) => store.applyRealtimeProject(n))
   ch.on('presence', { event: 'sync' }, () => { _remotePresence.value = { ...ch.presenceState() } })
+  ch.on('presence', { event: 'join' }, () => { _remotePresence.value = { ...ch.presenceState() } })
+  ch.on('presence', { event: 'leave' }, () => { _remotePresence.value = { ...ch.presenceState() } })
   ch.subscribe(status => {
     if (status === 'SUBSCRIBED') { clearTimeout(_reconnectTimer); trackField(null) }
     if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
