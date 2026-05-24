@@ -57,10 +57,7 @@ Deno.serve(async (req) => {
     .select('display_name')
     .eq('user_id', user.id)
     .maybeSingle()
-  const userDisplayName = person?.display_name
-    || (fullUser?.user_metadata?.name as string)
-    || fullUser?.email
-    || userEmail
+  const userDisplayName = person?.display_name || userEmail
 
   const encoder = new TextEncoder()
   const options = await generateRegistrationOptions({
