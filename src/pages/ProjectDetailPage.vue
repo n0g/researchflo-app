@@ -24,13 +24,15 @@
             <h1
               v-if="!editingTitle"
               class="project-title project-title-editable"
+              :class="{ 'live-draft-text': remoteDraft('title') }"
+              :style="remoteDraft('title') ? `color: ${remoteDraft('title').color}` : ''"
               role="button"
               tabindex="0"
               aria-label="Edit project title"
               @click="startEditTitle"
               @keydown.enter.prevent="startEditTitle"
               @keydown.space.prevent="startEditTitle"
-            >{{ project?.name ?? 'Loading…' }}</h1>
+            >{{ remoteDraft('title')?.value ?? project?.name ?? 'Loading…' }}</h1>
             <textarea
               v-else
               ref="titleInputEl"
@@ -38,7 +40,8 @@
               class="project-title project-title-input"
               rows="2"
               aria-label="Project title"
-              @focus="trackField('title')"
+              @focus="trackField('title', titleDraft)"
+              @input="trackField('title', $event.target.value)"
               @blur="saveTitle(); clearField()"
               @keydown.meta.enter.prevent="titleInputEl?.blur()"
               @keydown.escape.prevent="cancelTitle"
@@ -101,14 +104,15 @@
             <div
               v-if="!editingStatus"
               class="meta-editable"
-              :class="{ placeholder: !statusText }"
+              :class="{ placeholder: !statusText && !remoteDraft('status'), 'live-draft-text': remoteDraft('status') }"
+              :style="remoteDraft('status') ? `color: ${remoteDraft('status').color}` : ''"
               role="button"
               tabindex="0"
               aria-label="Edit status"
               @click="startEdit('status')"
               @keydown.enter.prevent="startEdit('status')"
               @keydown.space.prevent="startEdit('status')"
-            >{{ statusText || 'Add a status…' }}</div>
+            >{{ remoteDraft('status')?.value ?? statusText || 'Add a status…' }}</div>
             <textarea
               v-else
               ref="statusTextareaEl"
@@ -116,7 +120,8 @@
               class="meta-textarea"
               rows="3"
               aria-label="Status"
-              @focus="trackField('status')"
+              @focus="trackField('status', statusDraft)"
+              @input="trackField('status', $event.target.value)"
               @blur="saveStatus(); clearField()"
               @keydown.escape.prevent="cancelStatus"
               @keydown.meta.enter.prevent="statusTextareaEl?.blur()"
@@ -162,14 +167,15 @@
               <div
                 v-if="!editingVenue"
                 class="meta-editable"
-                :class="{ placeholder: !venueText }"
+                :class="{ placeholder: !venueText && !remoteDraft('venue'), 'live-draft-text': remoteDraft('venue') }"
+                :style="remoteDraft('venue') ? `color: ${remoteDraft('venue').color}` : ''"
                 role="button"
                 tabindex="0"
                 aria-label="Edit venue"
                 @click="startEditVenue"
                 @keydown.enter.prevent="startEditVenue"
                 @keydown.space.prevent="startEditVenue"
-              >{{ venueText || 'Add venue…' }}</div>
+              >{{ remoteDraft('venue')?.value ?? venueText || 'Add venue…' }}</div>
               <input
                 v-else
                 ref="venueInputEl"
@@ -178,7 +184,8 @@
                 type="text"
                 placeholder="e.g. PETS 2026"
                 aria-label="Venue"
-                @focus="trackField('venue')"
+                @focus="trackField('venue', venueDraft)"
+                @input="trackField('venue', $event.target.value)"
                 @blur="saveVenue(); clearField()"
                 @keydown.enter.prevent="venueInputEl?.blur()"
                 @keydown.escape.prevent="cancelVenue"
@@ -241,14 +248,15 @@
               <div
                 v-if="!editingSubmission"
                 class="meta-editable submission-url-text"
-                :class="{ placeholder: !submissionUrl }"
+                :class="{ placeholder: !submissionUrl && !remoteDraft('submission'), 'live-draft-text': remoteDraft('submission') }"
+                :style="remoteDraft('submission') ? `color: ${remoteDraft('submission').color}` : ''"
                 role="button"
                 tabindex="0"
                 aria-label="Edit submission URL"
                 @click="startEditSubmission"
                 @keydown.enter.prevent="startEditSubmission"
                 @keydown.space.prevent="startEditSubmission"
-              >{{ submissionUrlDisplay || 'Add submission URL…' }}</div>
+              >{{ remoteDraft('submission')?.value ?? submissionUrlDisplay || 'Add submission URL…' }}</div>
               <input
                 v-else
                 ref="submissionInputEl"
@@ -257,7 +265,8 @@
                 type="url"
                 placeholder="https://…"
                 aria-label="Submission URL"
-                @focus="trackField('submission')"
+                @focus="trackField('submission', submissionDraft)"
+                @input="trackField('submission', $event.target.value)"
                 @blur="saveSubmission(); clearField()"
                 @keydown.enter.prevent="submissionInputEl?.blur()"
                 @keydown.escape.prevent="cancelSubmission"
@@ -298,14 +307,15 @@
             <div
               v-if="!editingSummary"
               class="meta-editable"
-              :class="{ placeholder: !summaryText }"
+              :class="{ placeholder: !summaryText && !remoteDraft('summary'), 'live-draft-text': remoteDraft('summary') }"
+              :style="remoteDraft('summary') ? `color: ${remoteDraft('summary').color}` : ''"
               role="button"
               tabindex="0"
               aria-label="Edit summary"
               @click="startEdit('summary')"
               @keydown.enter.prevent="startEdit('summary')"
               @keydown.space.prevent="startEdit('summary')"
-            >{{ summaryText || 'Add a summary…' }}</div>
+            >{{ remoteDraft('summary')?.value ?? summaryText || 'Add a summary…' }}</div>
             <textarea
               v-else
               ref="summaryTextareaEl"
@@ -313,7 +323,8 @@
               class="meta-textarea"
               rows="4"
               aria-label="Summary"
-              @focus="trackField('summary')"
+              @focus="trackField('summary', summaryDraft)"
+              @input="trackField('summary', $event.target.value)"
               @blur="saveSummary(); clearField()"
               @keydown.escape.prevent="cancelSummary"
               @keydown.meta.enter.prevent="summaryTextareaEl?.blur()"
@@ -879,13 +890,18 @@ function presenceFor(field) {
     .filter(s => s.field === field)
 }
 
-function trackField(field) {
+// Returns the first remote user actively typing in a field, with their live draft value.
+function remoteDraft(field) {
+  return presenceFor(field).find(s => s.value != null) ?? null
+}
+
+function trackField(field, value) {
   const name = store.allPeople.find(p => p.id === store.myPeopleId)?.display_name || authStore.user?.email?.split('@')[0] || '?'
-  _channel.value?.track({ displayName: name, field })
+  _channel.value?.track({ displayName: name, field, value: value ?? null })
 }
 function clearField() {
   const name = store.allPeople.find(p => p.id === store.myPeopleId)?.display_name || authStore.user?.email?.split('@')[0] || '?'
-  _channel.value?.track({ displayName: name, field: null })
+  _channel.value?.track({ displayName: name, field: null, value: null })
 }
 
 let _reconnectTimer = null

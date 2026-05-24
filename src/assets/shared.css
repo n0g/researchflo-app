@@ -647,6 +647,7 @@ html[data-theme="light"] .task-due-right.due-soon { color: #b45309; }
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
 }
+.live-draft-text { font-style: italic; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
