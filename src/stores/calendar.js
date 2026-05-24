@@ -511,10 +511,14 @@ export const useCalendarStore = defineStore('calendar', () => {
 
   watch(isConnected, (connected) => { if (connected) drainSyncQueue().catch(() => {}) })
 
+  async function checkConnection() {
+    await _ensureToken()
+  }
+
   return {
     clientId, events, loading, connectError, selectedCalendarId, calendarList, writableCalendars,
     isConnected, scheduledByTaskId,
-    saveClientId, saveCalendarId, connect, disconnect, init,
+    saveClientId, saveCalendarId, connect, disconnect, init, checkConnection,
     loadWeekEvents, createEvent, deleteEvent, deleteAllByTaskId, updateEvent, updateEventTitle,
     syncEventForTask, fetchCalendarList, linkEventToTask, reconcileScheduledTasks, unlinkTaskFromEvent,
   }

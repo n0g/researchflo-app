@@ -71,6 +71,12 @@ const passkeyError = ref('')
 // Guard: prevent watchers from re-saving settings that were just loaded
 const settingsLoaded = ref(false)
 
+// After passkey/OTP sign-in, calStore.init() ran before auth completed.
+// Re-check GCal connection once the user is confirmed authenticated.
+watch(() => authStore.user, (user, prev) => {
+  if (user && !prev) calStore.checkConnection()
+})
+
 watch(() => reviewsStore.sites, (sites) => {
   if (!settingsLoaded.value) return
   settingsStore.save('hotcrp_sites', sites)
