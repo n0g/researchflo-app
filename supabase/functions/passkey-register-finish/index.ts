@@ -23,6 +23,15 @@ function toBase64url(buf: Uint8Array): string {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
 
+  try {
+    return await handle(req)
+  } catch (err) {
+    console.error('Unhandled error in passkey-register-finish:', err)
+    return json({ error: String(err) }, 500)
+  }
+})
+
+async function handle(req: Request) {
   const authHeader = req.headers.get('Authorization')
   if (!authHeader) return json({ error: 'Unauthorized' }, 401)
 
@@ -81,14 +90,23 @@ Deno.serve(async (req) => {
     return json({ error: 'Registration not verified' }, 400)
   }
 
-  const { credential: cred } = verification.registrationInfo
+  const info = verification.registrationInfo as Record<string, unknown>
+  const credentialId = info.credentialID as string
+  const credentialPublicKey = info.credentialPublicKey as Uint8Array
+  const counter = (info.counter as number) ?? 0
+  const aaguid = (info.aaguid as string) ?? ''
+
+  if (!credentialId || !credentialPublicKey) {
+    console.error('Missing credential fields in registrationInfo:', Object.keys(info))
+    return json({ error: 'Missing credential fields' }, 500)
+  }
 
   const { error: insertError } = await admin.from('passkeys').insert({
     user_id: user.id,
-    credential_id: cred.id,
-    public_key: toBase64url(cred.publicKey),
-    aaguid: verification.registrationInfo.aaguid || '',
-    sign_count: cred.counter,
+    credential_id: credentialId,
+    public_key: toBase64url(credentialPublicKey),
+    aaguid,
+    sign_count: counter,
     device_label: (deviceLabel || '').slice(0, 120),
   })
 
@@ -100,4 +118,4 @@ Deno.serve(async (req) => {
   await admin.from('auth_challenges').delete().eq('id', challengeId)
 
   return json({ success: true })
-})
+}

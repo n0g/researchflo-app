@@ -264,6 +264,26 @@
                   @keydown.enter.prevent="$event.target.blur()"
                 />
               </div>
+              <div class="settings-row">
+                <span class="settings-row-label">Email</span>
+                <div class="settings-row-right">
+                  <span v-if="emailMsg" class="settings-inline-msg">{{ emailMsg }}</span>
+                  <input
+                    type="email"
+                    class="settings-inline-input"
+                    :value="emailDraft"
+                    :disabled="emailBusy"
+                    @change="emailDraft = $event.target.value"
+                    @keydown.enter.prevent="saveEmail"
+                  />
+                  <button
+                    v-if="emailDraft !== (authStore.user?.email || '')"
+                    class="btn sm"
+                    :disabled="emailBusy"
+                    @click="saveEmail"
+                  >{{ emailBusy ? '…' : 'Update' }}</button>
+                </div>
+              </div>
               <template v-if="passkeySupported">
                 <div class="settings-row settings-row--passkey-header">
                   <span class="settings-row-label">Passkeys</span>
@@ -295,6 +315,28 @@
               </div>
             </div>
           </div>
+
+          <!-- ── Danger zone ── -->
+          <div class="settings-section">
+            <div class="settings-section-title">Danger zone</div>
+            <div class="settings-row-group">
+              <div class="settings-row">
+                <div>
+                  <span class="settings-row-label">Delete account</span>
+                  <p class="settings-hint">Permanently removes your account and all data. This cannot be undone.</p>
+                </div>
+                <div v-if="!deleteConfirm" class="settings-row-right">
+                  <button class="btn sm danger" @click="deleteConfirm = true">Delete</button>
+                </div>
+                <div v-else class="settings-row-right">
+                  <button class="btn sm" @click="deleteConfirm = false">Cancel</button>
+                  <button class="btn sm danger" :disabled="deleteBusy" @click="deleteAccount">
+                    {{ deleteBusy ? 'Deleting…' : 'Confirm delete' }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -307,6 +349,7 @@
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useBoardStore } from '../stores/board.js'
 import { useAuthStore } from '../stores/auth.js'
+import { supabase } from '../lib/supabase.js'
 import { useReviewsStore } from '../stores/reviews.js'
 import { useCalendarStore } from '../stores/calendar.js'
 import { useSidebar } from '../composables/useSidebar.js'
@@ -422,6 +465,11 @@ async function onEmailChange(person, value) {
 // ── Account ──
 const authStore = useAuthStore()
 const displayName = ref('')
+const emailDraft = ref(authStore.user?.email || '')
+const emailMsg = ref('')
+const emailBusy = ref(false)
+const deleteConfirm = ref(false)
+const deleteBusy = ref(false)
 const passkeySupported = isPasskeySupported()
 const passkeyBusy = ref(false)
 const passkeyMsg = ref('')
@@ -468,6 +516,48 @@ async function removePasskey(id) {
 async function loadDisplayName() {
   const profile = await boardStore.loadMyProfile().catch(() => null)
   if (profile) displayName.value = profile.display_name || ''
+  // Sync email draft from live session in case it wasn't set at init
+  if (!emailDraft.value && authStore.user?.email) emailDraft.value = authStore.user.email
+}
+
+async function saveEmail() {
+  const trimmed = emailDraft.value.trim()
+  if (!trimmed || trimmed === authStore.user?.email) return
+  emailBusy.value = true
+  emailMsg.value = ''
+  try {
+    const { error } = await supabase.auth.updateUser({ email: trimmed })
+    if (error) throw error
+    emailMsg.value = 'Confirmation sent — check your inbox.'
+  } catch (err) {
+    emailMsg.value = err.message || 'Failed to update email.'
+  } finally {
+    emailBusy.value = false
+    setTimeout(() => { emailMsg.value = '' }, 5000)
+  }
+}
+
+async function deleteAccount() {
+  deleteBusy.value = true
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/account-delete`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    })
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      throw new Error(d.error || 'Delete failed')
+    }
+    await authStore.signOut()
+  } catch (err) {
+    deleteBusy.value = false
+    deleteConfirm.value = false
+    passkeyMsg.value = err.message || 'Failed to delete account.'
+  }
 }
 
 async function onDisplayNameChange(value) {

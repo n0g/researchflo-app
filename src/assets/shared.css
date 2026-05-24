@@ -343,7 +343,7 @@ html[data-theme="dark"] .settings-sheet {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 8px 0;
+  padding: 8px 16px;
   border-top: 1px solid var(--border);
 }
 .passkey-row-info {

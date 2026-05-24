@@ -437,6 +437,11 @@ verify_jwt = false
 import_map = "./functions/passkey-delete/deno.json"
 entrypoint = "./functions/passkey-delete/index.ts"
 
+[functions.account-delete]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/account-delete/index.ts"
+
 [functions.hotcrp-proxy]
 enabled = true
 verify_jwt = true

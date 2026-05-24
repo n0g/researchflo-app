@@ -23,6 +23,15 @@ function fromBase64url(str: string): Uint8Array {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
 
+  try {
+    return await handle(req)
+  } catch (err) {
+    console.error('Unhandled error in passkey-auth-finish:', err)
+    return json({ error: String(err) }, 500)
+  }
+})
+
+async function handle(req: Request) {
   const admin = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
@@ -68,15 +77,16 @@ Deno.serve(async (req) => {
       expectedChallenge: challengeRow.challenge,
       expectedOrigin: origins,
       expectedRPID: rpId,
-      credential: {
-        id: passkey.credential_id,
-        publicKey: fromBase64url(passkey.public_key),
+      // Support both old API (authenticator.credentialID) and new API (credential.id)
+      authenticator: {
+        credentialID: fromBase64url(passkey.credential_id),
+        credentialPublicKey: fromBase64url(passkey.public_key),
         counter: passkey.sign_count,
       },
-    })
+    } as Parameters<typeof verifyAuthenticationResponse>[0])
   } catch (err) {
     console.error('WebAuthn verification error:', err)
-    return json({ error: 'Verification failed' }, 401)
+    return json({ error: `Verification failed: ${err}` }, 401)
   }
 
   if (!verification.verified) return json({ error: 'Authentication failed' }, 401)
@@ -90,13 +100,29 @@ Deno.serve(async (req) => {
   // Delete used challenge
   await admin.from('auth_challenges').delete().eq('id', challengeId)
 
-  // Create a Supabase session for the verified user
-  const { data: sessionData, error: sessionError } = await admin.auth.admin.createSession({
-    user_id: passkey.user_id,
-  })
+  // Create a session for the verified user via magic link exchange
+  const { data: { user: authUser } } = await admin.auth.admin.getUserById(passkey.user_id)
+  if (!authUser?.email) return json({ error: 'User has no email' }, 500)
 
-  if (sessionError || !sessionData?.session) {
-    console.error('Session creation error:', sessionError)
+  const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+    type: 'magiclink',
+    email: authUser.email,
+  })
+  if (linkError || !linkData?.properties?.hashed_token) {
+    console.error('generateLink error:', linkError)
+    return json({ error: 'Failed to create session' }, 500)
+  }
+
+  const anonClient = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_ANON_KEY')!,
+  )
+  const { data: sessionData, error: otpError } = await anonClient.auth.verifyOtp({
+    token_hash: linkData.properties.hashed_token,
+    type: 'magiclink',
+  })
+  if (otpError || !sessionData?.session) {
+    console.error('verifyOtp error:', otpError)
     return json({ error: 'Failed to create session' }, 500)
   }
 
@@ -104,4 +130,4 @@ Deno.serve(async (req) => {
     access_token: sessionData.session.access_token,
     refresh_token: sessionData.session.refresh_token,
   })
-})
+}
