@@ -437,6 +437,15 @@ function getWeekStart(d) {
 }
 
 const weekStart = ref(getWeekStart(new Date()))
+
+watch(schedPrefs.weekStartDay, () => {
+  // re-anchor to the new week boundary for whichever week is currently visible
+  const mid = new Date(weekStart.value)
+  mid.setDate(mid.getDate() + 3)
+  weekStart.value = getWeekStart(mid)
+  calStore.loadWeekEvents(weekStart.value)
+})
+
 const calBodyEl = ref(null)
 const calDaysEl = ref(null)
 
