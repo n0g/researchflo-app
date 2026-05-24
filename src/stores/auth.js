@@ -19,19 +19,18 @@ export const useAuthStore = defineStore('auth', () => {
   const pendingPasskeySetup = ref(false)
 
   async function init() {
-    try {
-      const { data } = await supabase.auth.getSession()
-      session.value = data.session
-      user.value = data.session?.user ?? null
-    } catch (e) {
-      console.error('Auth init failed:', e)
-    } finally {
-      initialized.value = true
-    }
-
-    supabase.auth.onAuthStateChange((_, s) => {
-      session.value = s
-      user.value = s?.user ?? null
+    // Wait for INITIAL_SESSION — Supabase fires this only after processing any URL hash tokens
+    // (invite links, magic links). Gating initialized on this event prevents the login page from
+    // flashing before a hash-based session is extracted.
+    await new Promise((resolve) => {
+      supabase.auth.onAuthStateChange((event, s) => {
+        session.value = s
+        user.value = s?.user ?? null
+        if (event === 'INITIAL_SESSION') {
+          initialized.value = true
+          resolve()
+        }
+      })
     })
 
     document.addEventListener('visibilitychange', () => {

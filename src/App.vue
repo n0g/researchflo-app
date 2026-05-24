@@ -73,8 +73,17 @@ const settingsLoaded = ref(false)
 
 // After passkey/OTP sign-in, calStore.init() ran before auth completed.
 // Re-check GCal connection once the user is confirmed authenticated.
-watch(() => authStore.user, (user, prev) => {
-  if (user && !prev) calStore.checkConnection()
+// Also claim any pending invite — the onMounted check handles the already-signed-in case,
+// but this watcher handles sign-in that happens after mount (e.g. passkey redirect).
+watch(() => authStore.user, async (user, prev) => {
+  if (user && !prev) {
+    calStore.checkConnection()
+    const pendingInvite = localStorage.getItem('pending_invite_token')
+    if (pendingInvite) {
+      localStorage.removeItem('pending_invite_token')
+      await store.claimInvite(pendingInvite).catch(console.error)
+    }
+  }
 })
 
 watch(() => reviewsStore.sites, (sites) => {

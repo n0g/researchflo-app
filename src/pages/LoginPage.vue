@@ -80,8 +80,11 @@ const passkeyAvailable = ref(isPasskeySupported())
 const hasInvite = computed(() => !!localStorage.getItem('pending_invite_token'))
 
 onMounted(async () => {
-  if (!isPasskeySupported()) {
+  // Invited users don't have passkeys yet — skip discoverable auth and go straight to the form.
+  if (hasInvite.value || !isPasskeySupported()) {
     phase.value = 'form'
+    await nextTick()
+    emailEl.value?.focus()
     return
   }
 
