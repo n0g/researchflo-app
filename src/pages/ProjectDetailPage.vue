@@ -483,16 +483,16 @@ const deadline = computed(() => store.projectDeadline(projectId.value))
 const isProjectOwner = computed(() => project.value?.owner_id === authStore.user?.id)
 
 const personLabels = computed(() => {
-  const currentUserId = authStore.user?.id
+  const myId = store.myPeopleId
   const seen = new Set()
   const items = []
   const op = project.value?.owner_person
-  if (op && op.user_id !== currentUserId) {
+  if (op && op.id !== myId) {
     seen.add(op.id)
     items.push({ ...op, isOwner: true })
   }
   for (const m of (project.value?.members || [])) {
-    if (!m.person || m.person.user_id === currentUserId || seen.has(m.person.id)) continue
+    if (!m.person || m.person.id === myId || seen.has(m.person.id)) continue
     seen.add(m.person.id)
     items.push({ ...m.person, isOwner: false })
   }
@@ -733,10 +733,10 @@ const collabWrapperEl = ref(null)
 
 const filteredCollabs = computed(() => {
   const q = collabQuery.value.toLowerCase()
-  const currentUserId = authStore.user?.id
+  const myId = store.myPeopleId
   const existingIds = new Set(personLabels.value.map(p => p.id))
   return store.allPeople
-    .filter(p => !existingIds.has(p.id) && p.user_id !== currentUserId && (!q || p.display_name.toLowerCase().includes(q)))
+    .filter(p => !existingIds.has(p.id) && p.id !== myId && (!q || p.display_name.toLowerCase().includes(q)))
     .slice(0, 8)
 })
 

@@ -26,6 +26,8 @@ export const useBoardStore = defineStore('board', () => {
   const _stageById = ref(new Map())
   // Per-user energy levels: projectId → 0|1|2
   const _userEnergy = ref(new Map())
+  // Current user's people.id — used for self-filter in collaborator lists
+  const myPeopleId = ref(null)
 
   // ── Computed ───────────────────────────────────────────────────────────────
   const stageLabels = computed(() => (stages.value || []).map(s => s.id).filter(Boolean))
@@ -152,6 +154,10 @@ export const useBoardStore = defineStore('board', () => {
   async function loadData() {
     loading.value = true
     try {
+      // Ensure current user has a people row (creates one if missing) and store their people.id
+      const myProfile = await loadMyProfile().catch(() => null)
+      myPeopleId.value = myProfile?.id ?? null
+
       const [
         { data: projectsData, error: projErr },
         { data: tasksData,    error: taskErr },
@@ -606,7 +612,7 @@ export const useBoardStore = defineStore('board', () => {
     token, stages, projects, tasks, loading, lastUpdated, cardDragging,
     triageTaskIds, triageCurrentId, pendingScheduleTask, labels,
     activeFilter, stageLabels, displayProjects, inboxProjectId,
-    excludedSectionIds, deadlineSectionIds, allCollaborators, allVenues, allPeople, setupStatus,
+    excludedSectionIds, deadlineSectionIds, allCollaborators, allVenues, allPeople, setupStatus, myPeopleId,
     initStages, saveToken, saveStages, resetToken, loadData, loadIfStale,
     projectStage, projectStatusTask, projectMeta, projectTasks, projectDeadline,
     moveStage, completeTask, deleteTask, reorderTasks, quickAddTask, updateTaskDue,
