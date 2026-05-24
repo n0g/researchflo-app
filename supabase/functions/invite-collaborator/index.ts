@@ -37,10 +37,10 @@ Deno.serve(async (req) => {
     const { personId, email } = await req.json()
     if (!personId || !email) return json({ error: 'Missing personId or email' }, 400)
 
-    // Save email on the people row
+    // Save email and record invite timestamp on the people row
     const { data: person, error: fetchErr } = await admin
       .from('people')
-      .update({ email: email.trim() })
+      .update({ email: email.trim(), invited_at: new Date().toISOString() })
       .eq('id', personId)
       .is('user_id', null)  // only uninvited people
       .select('invite_token')
