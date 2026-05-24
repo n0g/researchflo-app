@@ -492,7 +492,62 @@ html[data-theme="dark"] .popup-dropdown {
   margin-top: 4px;
   margin-bottom: 0;
 }
-.new-project-error { color: #e53e3e; }
+.new-project-error {
+  color: #e53e3e;
+  font-size: 13px;
+  margin: 0 0 8px;
+}
+.new-project-stages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.new-project-stage-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border);
+  background: transparent;
+  color: var(--text2);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+}
+.new-project-stage-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.new-project-stage-btn.selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.new-project-actions {
+  margin-top: auto;
+  padding-top: 24px;
+}
+.btn-create-project {
+  width: 100%;
+  padding: 10px 0;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: opacity 0.15s;
+}
+.btn-create-project:disabled { opacity: 0.45; cursor: default; }
+.btn-create-project:not(:disabled):hover { opacity: 0.88; }
 .project-meta-footer {
   display: flex;
   align-items: center;

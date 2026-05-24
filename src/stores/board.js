@@ -502,20 +502,21 @@ export const useBoardStore = defineStore('board', () => {
     tasks.value = tasks.value.filter(t => t.project_id !== projectId)
   }
 
-  async function createProject(name) {
+  async function createProject(name, stageId) {
     const { data: { user } } = await supabase.auth.getUser()
-    const defaultStage = stages.value?.[0]
-    const defaultStageId = defaultStage?.id ?? null
+    const resolvedStageId = stageId ?? stages.value?.[0]?.id ?? null
 
     const { data: project, error } = await supabase.from('projects').insert({
       name,
       owner_id: user.id,
-      stage_id: defaultStageId,
+      stage_id: resolvedStageId,
     }).select().single()
     if (error) throw new Error(error.message)
 
-    // Owner access is granted via owner_id on the project; no project_members row needed for self
-    projects.value.push({ ...project, members: [] })
+    const { data: myPerson } = await supabase.from('people')
+      .select('id, display_name, user_id, email, invite_token')
+      .eq('user_id', user.id).maybeSingle()
+    projects.value.push({ ...project, members: [], owner_person: myPerson || null })
     return project
   }
 
