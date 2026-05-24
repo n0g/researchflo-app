@@ -457,6 +457,23 @@ export const useBoardStore = defineStore('board', () => {
     projects.value.splice(idx, 1, { ...existing, ...newRow, members: existing.members, owner_person: existing.owner_person })
   }
 
+  async function applyRealtimeMember(event, newRow, oldRow) {
+    if (event === 'DELETE') {
+      const { project_id, person_id } = oldRow
+      const project = projects.value.find(p => p.id === project_id)
+      if (project) project.members = (project.members || []).filter(m => m.person?.id !== person_id)
+    } else if (event === 'INSERT') {
+      const { project_id, person_id } = newRow
+      const project = projects.value.find(p => p.id === project_id)
+      if (!project || (project.members || []).some(m => m.person?.id === person_id)) return
+      const { data: person } = await supabase.from('people').select('id, display_name, user_id, email, invite_token').eq('id', person_id).single()
+      if (person) {
+        if (!project.members) project.members = []
+        project.members.push({ person })
+      }
+    }
+  }
+
   async function renameProject(projectId, name) {
     const { error } = await supabase.from('projects').update({ name }).eq('id', projectId)
     if (error) throw new Error(error.message)
@@ -654,6 +671,6 @@ export const useBoardStore = defineStore('board', () => {
     focusProjectIds, projectEnergy, cycleEnergy,
     addInboxTask, assignTaskToProject,
     loadPendingCollaborators, claimInvite, loadMyProfile, saveMyDisplayName, savePersonEmail, sendInviteEmail,
-    applyRealtimeTask, applyRealtimeProject,
+    applyRealtimeTask, applyRealtimeProject, applyRealtimeMember,
   }
 })

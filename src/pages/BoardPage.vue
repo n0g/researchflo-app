@@ -52,6 +52,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { f7 } from 'framework7-vue/bundle'
 import { useBoardStore } from '../stores/board.js'
+import { supabase } from '../lib/supabase.js'
 import { useReviewsStore } from '../stores/reviews.js'
 import { usePullToRefresh } from '../composables/usePullToRefresh.js'
 import { useSidebar } from '../composables/useSidebar.js'
@@ -99,9 +100,41 @@ function triggerSubmissionStatuses() {
   reviewsStore.loadSubmissionStatuses(items)
 }
 
+// ── Board realtime ─────────────────────────────────────────────────────────
+let _boardChannel = null
+let _boardReconnectTimer = null
+
+function _setupBoardChannel() {
+  if (_boardChannel) return
+  const ch = supabase.channel('board')
+  ch.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'projects' },
+    ({ new: n }) => store.applyRealtimeProject(n))
+  ch.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'project_members' },
+    ({ eventType, new: n, old: o }) => store.applyRealtimeMember(eventType, n, o))
+  ch.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'project_members' },
+    ({ eventType, new: n, old: o }) => store.applyRealtimeMember(eventType, n, o))
+  ch.subscribe(status => {
+    if (status === 'SUBSCRIBED') clearTimeout(_boardReconnectTimer)
+    if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+      _boardReconnectTimer = setTimeout(() => { _teardownBoardChannel(); _setupBoardChannel() }, 3000)
+    }
+  })
+  _boardChannel = ch
+}
+
+function _teardownBoardChannel() {
+  clearTimeout(_boardReconnectTimer)
+  if (_boardChannel) { supabase.removeChannel(_boardChannel); _boardChannel = null }
+}
+
+function _onBoardVisibilityChange() {
+  if (document.visibilityState === 'visible' && !_boardChannel) _setupBoardChannel()
+}
+
 onMounted(async () => {
   store.initStages()
   await store.loadIfStale()
+  _setupBoardChannel()
   boardReady.value = true
   triggerSubmissionStatuses()
   const projectId = new URLSearchParams(location.search).get('project')
@@ -115,9 +148,12 @@ onMounted(async () => {
     }
   }
   document.addEventListener('keydown', onKeyDown)
+  document.addEventListener('visibilitychange', _onBoardVisibilityChange)
 })
 
 onUnmounted(() => {
   document.removeEventListener('keydown', onKeyDown)
+  document.removeEventListener('visibilitychange', _onBoardVisibilityChange)
+  _teardownBoardChannel()
 })
 </script>
