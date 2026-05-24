@@ -55,8 +55,11 @@ useAccentColor()
 const authStore = useAuthStore()
 const store = useBoardStore()
 
-// Capture synchronously — Supabase's initialize() clears the URL hash before onMounted fires
-const hadAuthCallback = !!window.location.hash || new URLSearchParams(window.location.search).has('code')
+// Capture synchronously — Supabase's initialize() clears the URL hash before onMounted fires.
+// Exclude GCal OAuth callbacks (?code + gcal_csrf in sessionStorage) from triggering passkey setup.
+const _searchParams = new URLSearchParams(window.location.search)
+const _isGCalCallback = _searchParams.has('code') && !!sessionStorage.getItem('gcal_csrf')
+const hadAuthCallback = (!!window.location.hash || _searchParams.has('code')) && !_isGCalCallback
 const reviewsStore = useReviewsStore()
 const calStore = useCalendarStore()
 const settingsStore = useSettingsStore()
