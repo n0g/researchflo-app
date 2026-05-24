@@ -716,7 +716,6 @@ const mcpConfigSnippet = computed(() => {
   return JSON.stringify({
     mcpServers: {
       researchflo: {
-        type: 'http',
         url,
         headers: { Authorization: `Bearer ${mcpToken.value ?? ''}` },
       },
