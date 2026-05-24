@@ -131,6 +131,17 @@ const TOOLS = [
       },
     },
   },
+  {
+    name: 'get_stage_history',
+    description: 'Get the pipeline stage history for a project, showing how long it spent (or has spent) in each stage. Useful for identifying stuck projects.',
+    inputSchema: {
+      type: 'object',
+      required: ['project_id'],
+      properties: {
+        project_id: { type: 'string', description: 'UUID of the project' },
+      },
+    },
+  },
 ]
 
 // deno-lint-ignore no-explicit-any
@@ -388,6 +399,35 @@ async function callTool(name: string, args: any, userId: string, admin: Admin): 
       const { error } = await admin.from('projects').update(patch).eq('id', project_id)
       if (error) return toolErr(error.message)
       return toolOk(`Project updated.`)
+    }
+
+    case 'get_stage_history': {
+      const { project_id } = args
+      if (!project_id) return toolErr('project_id is required')
+
+      const { allIds } = await getAccessibleProjectIds(userId, admin)
+      if (!allIds.includes(project_id)) return toolErr('Project not found or access denied')
+
+      const { data: history, error } = await admin
+        .from('project_stage_history')
+        .select('entered_at, stage:stages(id, name)')
+        .eq('project_id', project_id)
+        .order('entered_at', { ascending: false })
+      if (error) return toolErr(error.message)
+
+      const now = new Date()
+      const out = (history ?? []).map((entry: any, i: number) => {
+        const enteredAt = new Date(entry.entered_at)
+        const exitedAt = i === 0 ? now : new Date((history as any[])[i - 1].entered_at)
+        const days = Math.round((exitedAt.getTime() - enteredAt.getTime()) / 86_400_000)
+        return {
+          stage: entry.stage?.name ?? 'Unassigned',
+          entered_at: entry.entered_at,
+          days_in_stage: days,
+          current: i === 0,
+        }
+      })
+      return toolOk(JSON.stringify(out, null, 2))
     }
 
     default:

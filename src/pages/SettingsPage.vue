@@ -447,7 +447,7 @@
 
               <p class="settings-hint mcp-tools-hint">
                 <strong>Available tools:</strong>
-                list_projects · list_tasks · get_project_stats · add_task · update_task · mark_task_complete · add_project · update_project
+                list_projects · list_tasks · get_project_stats · get_stage_history · add_task · update_task · mark_task_complete · add_project · update_project
               </p>
             </div>
           </div>
