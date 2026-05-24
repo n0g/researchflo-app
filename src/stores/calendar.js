@@ -75,7 +75,10 @@ export const useCalendarStore = defineStore('calendar', () => {
   // Check OAuth callback params and verify connection on startup
   async function init() {
     const params = new URLSearchParams(window.location.search)
-    if (params.has('code')) {
+    // Only treat ?code as a GCal callback if we initiated a GCal OAuth flow
+    // (gcal_csrf in sessionStorage). A bare ?code is a Supabase PKCE callback.
+    const isGCalCallback = params.has('code') && !!sessionStorage.getItem('gcal_csrf')
+    if (isGCalCallback) {
       const code = params.get('code')
       const returnedState = params.get('state')
       const expectedCsrf = sessionStorage.getItem('gcal_csrf')
