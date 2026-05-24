@@ -20,6 +20,13 @@
           <p class="login-subtitle">
             {{ hasInvite ? 'Create your account to accept the invitation.' : 'Sign in to your account.' }}
           </p>
+          <div v-if="!hasInvite && passkeyAvailable" class="login-passkey-section">
+            <button class="btn primary login-btn" :disabled="busy" @click="signInWithPasskey">
+              <i class="ph ph-fingerprint" aria-hidden="true"></i>
+              {{ busy ? 'Please wait…' : 'Sign in with passkey' }}
+            </button>
+            <div class="login-divider"><span>or use email</span></div>
+          </div>
           <div class="login-fields">
             <input
               ref="emailEl"
@@ -68,6 +75,7 @@ const email = ref('')
 const busy = ref(false)
 const errorMsg = ref('')
 const emailEl = ref(null)
+const passkeyAvailable = ref(isPasskeySupported())
 
 const hasInvite = computed(() => !!localStorage.getItem('pending_invite_token'))
 
@@ -88,6 +96,19 @@ onMounted(async () => {
   await nextTick()
   if (phase.value === 'form') emailEl.value?.focus()
 })
+
+async function signInWithPasskey() {
+  errorMsg.value = ''
+  busy.value = true
+  try {
+    const result = await tryDiscoverableAuth()
+    if (!result) errorMsg.value = 'No passkey found or sign-in was cancelled.'
+  } catch (err) {
+    errorMsg.value = err.message || 'Passkey sign-in failed.'
+  } finally {
+    busy.value = false
+  }
+}
 
 async function submit() {
   const e = email.value.trim()
