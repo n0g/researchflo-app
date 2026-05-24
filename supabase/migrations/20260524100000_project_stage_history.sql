@@ -12,14 +12,15 @@ CREATE INDEX project_stage_history_project_idx
 
 ALTER TABLE public.project_stage_history ENABLE ROW LEVEL SECURITY;
 
--- Same visibility as the project itself (owner or collaborator)
+-- Same visibility as the project itself (owner or collaborator via people→project_members)
 CREATE POLICY "stage_history_select" ON public.project_stage_history
   FOR SELECT USING (
     EXISTS (
       SELECT 1 FROM public.projects p
       LEFT JOIN public.project_members pm ON pm.project_id = p.id
+      LEFT JOIN public.people pe ON pe.id = pm.person_id
       WHERE p.id = project_stage_history.project_id
-        AND (p.owner_id = auth.uid() OR pm.user_id = auth.uid())
+        AND (p.owner_id = auth.uid() OR pe.user_id = auth.uid())
     )
   );
 
