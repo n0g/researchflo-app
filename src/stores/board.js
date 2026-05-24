@@ -24,6 +24,8 @@ export const useBoardStore = defineStore('board', () => {
 
   // Internal map of stage UUID → { name, icon } built during loadData()
   const _stageById = ref(new Map())
+  // Per-user energy levels: projectId → 0|1|2
+  const _userEnergy = ref(new Map())
 
   // ── Computed ───────────────────────────────────────────────────────────────
   const stageLabels = computed(() => (stages.value || []).map(s => s.id).filter(Boolean))
@@ -33,6 +35,7 @@ export const useBoardStore = defineStore('board', () => {
   const allPeople = computed(() => {
     const map = new Map()
     for (const p of projects.value) {
+      if (p.owner_person && !map.has(p.owner_person.id)) map.set(p.owner_person.id, p.owner_person)
       for (const m of (p.members || [])) {
         if (m.person && !map.has(m.person.id)) map.set(m.person.id, m.person)
       }
@@ -52,8 +55,8 @@ export const useBoardStore = defineStore('board', () => {
 
   const focusProjectIds = computed(() => {
     const ids = new Set()
-    for (const p of displayProjects.value) {
-      if ((p.energy || 0) > 0) ids.add(p.id)
+    for (const [projectId, energy] of _userEnergy.value) {
+      if (energy > 0) ids.add(projectId)
     }
     return ids
   })
@@ -164,8 +167,28 @@ export const useBoardStore = defineStore('board', () => {
       if (stageErr) console.error('[board] stages error:', JSON.stringify(stageErr))
       console.log('[board] loaded:', projectsData?.length, 'projects,', tasksData?.length, 'tasks,', stagesData?.length, 'stages')
 
+      // Fetch owner people rows so collaborator list can include project owners
+      const ownerIds = [...new Set((projectsData || []).map(p => p.owner_id).filter(Boolean))]
+      const ownerPeopleMap = new Map()
+      if (ownerIds.length) {
+        const { data: ownerPeople } = await supabase
+          .from('people')
+          .select('id, display_name, user_id, email, invite_token')
+          .in('user_id', ownerIds)
+        for (const p of (ownerPeople || [])) ownerPeopleMap.set(p.user_id, p)
+      }
+      for (const proj of (projectsData || [])) {
+        proj.owner_person = ownerPeopleMap.get(proj.owner_id) || null
+      }
+
       projects.value = projectsData || []
       tasks.value = (tasksData || []).map(_transformTask)
+
+      // Load per-user energy levels
+      const { data: focusData } = await supabase.from('project_focus').select('project_id, energy')
+      const energyMap = new Map()
+      for (const row of (focusData || [])) energyMap.set(row.project_id, row.energy)
+      _userEnergy.value = energyMap
 
       // Build internal stage UUID → { name, icon } map
       const byId = new Map()
@@ -252,7 +275,7 @@ export const useBoardStore = defineStore('board', () => {
   }
 
   function projectEnergy(projectId) {
-    return projects.value.find(p => p.id === projectId)?.energy || 0
+    return _userEnergy.value.get(projectId) || 0
   }
 
   // ── Project mutations ──────────────────────────────────────────────────────
@@ -397,12 +420,12 @@ export const useBoardStore = defineStore('board', () => {
   }
 
   async function cycleEnergy(projectId) {
-    const project = projects.value.find(p => p.id === projectId)
-    if (!project) return
-    const next = ((project.energy || 0) + 1) % 3
-    const { error } = await supabase.from('projects').update({ energy: next }).eq('id', projectId)
+    const next = ((_userEnergy.value.get(projectId) || 0) + 1) % 3
+    const { data: { user } } = await supabase.auth.getUser()
+    const { error } = await supabase.from('project_focus')
+      .upsert({ user_id: user.id, project_id: projectId, energy: next, updated_at: new Date().toISOString() })
     if (error) throw new Error(error.message)
-    project.energy = next
+    _userEnergy.value = new Map(_userEnergy.value).set(projectId, next)
   }
 
   async function renameProject(projectId, name) {

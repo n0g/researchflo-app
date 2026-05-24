@@ -490,6 +490,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { f7 } from 'framework7-vue/bundle'
 import { useBoardStore } from '../stores/board.js'
 import { useAuthStore } from '../stores/auth.js'
 import { supabase } from '../lib/supabase.js'
@@ -801,9 +802,14 @@ async function regenerateMcpToken() {
   mcpRegenerating.value = false
 }
 
+function onSettingsTabShow(tabEl) {
+  if (tabEl?.id === 'view-settings') loadPending()
+}
+
 onMounted(async () => {
   if (rowsEl.value) initSortable(rowsEl.value, stageRows)
   document.addEventListener('click', closeIconPicker)
+  f7.on('tabShow', onSettingsTabShow)
   loadPending()
   loadDisplayName()
   loadPasskeys()
@@ -812,5 +818,6 @@ onMounted(async () => {
 
 onUnmounted(() => {
   document.removeEventListener('click', closeIconPicker)
+  f7.off('tabShow', onSettingsTabShow)
 })
 </script>

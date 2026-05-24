@@ -59,7 +59,7 @@
               <span v-for="member in personLabels" :key="member.id" class="collab-chip">
                 <i class="ph ph-user" aria-hidden="true"></i>
                 {{ member.display_name }}
-                <button class="collab-chip-remove" :aria-label="`Remove ${member.display_name}`" @click.stop="removeCollab(member.id)"><i class="ph ph-x" aria-hidden="true"></i></button>
+                <button v-if="isProjectOwner && !member.isOwner" class="collab-chip-remove" :aria-label="`Remove ${member.display_name}`" @click.stop="removeCollab(member.id)"><i class="ph ph-x" aria-hidden="true"></i></button>
               </span>
               <button v-if="!addingCollab" class="collab-add-pill" aria-label="Add collaborator" @click.stop="startAddCollab"><i class="ph ph-plus" aria-hidden="true"></i></button>
               <div v-else ref="collabWrapperEl" class="collab-combo-wrapper">
@@ -394,6 +394,7 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { f7 } from 'framework7-vue/bundle'
 import { useBoardStore } from '../stores/board.js'
+import { useAuthStore } from '../stores/auth.js'
 import { useReviewsStore } from '../stores/reviews.js'
 import { useSidebar } from '../composables/useSidebar.js'
 import { getStageIcon } from '../lib/helpers.js'
@@ -407,6 +408,7 @@ const props = defineProps({
 })
 
 const store = useBoardStore()
+const authStore = useAuthStore()
 const reviewsStore = useReviewsStore()
 const { sidebarCollapsed, toggleSidebar } = useSidebar()
 const newTaskContent = ref('')
@@ -478,7 +480,24 @@ async function onDragEnd() {
 const deadlineTask = computed(() => store.projectDeadlineTaskBase(projectId.value))
 const deadline = computed(() => store.projectDeadline(projectId.value))
 
-const personLabels = computed(() => (project.value?.members || []).map(m => m.person).filter(Boolean))
+const isProjectOwner = computed(() => project.value?.owner_id === authStore.user?.id)
+
+const personLabels = computed(() => {
+  const currentUserId = authStore.user?.id
+  const seen = new Set()
+  const items = []
+  const op = project.value?.owner_person
+  if (op && op.user_id !== currentUserId) {
+    seen.add(op.id)
+    items.push({ ...op, isOwner: true })
+  }
+  for (const m of (project.value?.members || [])) {
+    if (!m.person || m.person.user_id === currentUserId || seen.has(m.person.id)) continue
+    seen.add(m.person.id)
+    items.push({ ...m.person, isOwner: false })
+  }
+  return items
+})
 
 // ── Deadline ──
 const editingDeadline = ref(false)
@@ -714,9 +733,10 @@ const collabWrapperEl = ref(null)
 
 const filteredCollabs = computed(() => {
   const q = collabQuery.value.toLowerCase()
+  const currentUserId = authStore.user?.id
   const existingIds = new Set(personLabels.value.map(p => p.id))
   return store.allPeople
-    .filter(p => !existingIds.has(p.id) && (!q || p.display_name.toLowerCase().includes(q)))
+    .filter(p => !existingIds.has(p.id) && p.user_id !== currentUserId && (!q || p.display_name.toLowerCase().includes(q)))
     .slice(0, 8)
 })
 
