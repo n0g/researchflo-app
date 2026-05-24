@@ -114,45 +114,18 @@ Edge functions run on Supabase's servers (no local emulation needed unless you i
 
 ## HotCRP setup (optional)
 
-To show paper review statuses from a HotCRP conference system:
+To show paper review statuses from a HotCRP conference system, go to **Settings → Review Sites** and add your HotCRP base URL and API token (found in your HotCRP profile). The app proxies requests through a Supabase Edge Function so no separate CORS proxy is needed.
 
-1. **Deploy a CORS proxy** — create a Cloudflare Worker with this code:
+## Accessibility
 
-```js
-export default {
-  async fetch(request) {
-    const { searchParams } = new URL(request.url)
-    const target = searchParams.get('url')
-    const token = searchParams.get('token')
-    if (!target) return new Response('Missing url param', { status: 400 })
-    if (request.method === 'OPTIONS') {
-      return new Response(null, { headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET',
-        'Access-Control-Allow-Headers': '*',
-      }})
-    }
-    const headers = token ? { Authorization: `Bearer ${token}` } : {}
-    const response = await fetch(target, { headers })
-    return new Response(await response.text(), {
-      status: response.status,
-      headers: {
-        'Content-Type': response.headers.get('Content-Type') || 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-    })
-  }
-}
-```
+The app targets WCAG 2.1 AA. Focus is managed on all interactive elements, dialogs have proper ARIA roles and labels, live regions announce loading state changes, and all animations are suppressed under `prefers-reduced-motion`.
 
-2. In the app: **Settings → Review Sites** — add your proxy URL, HotCRP base URL, and API token (found in your HotCRP profile).
+## Security & privacy
 
-## Keyboard shortcuts
+**Your data stays yours.** Everything is stored in your own Supabase project — the app has no analytics, no telemetry, and no third-party data collection.
 
-| Key | Action |
-|-----|--------|
-| `R` | Refresh data |
+**Authentication** uses WebAuthn passkeys (Touch ID / Face ID via the device's secure enclave) with magic-link email as a fallback. Passwords are never stored. Sessions are JWT-based and managed by Supabase Auth.
 
-## Privacy
+**Row-level security** is enforced at the database level: every query is constrained to rows the authenticated user owns or has been explicitly invited to. Edge functions that need elevated access use a service role key that never reaches the client.
 
-All data is stored in your own Supabase project. The app has no analytics, no third-party data sharing, and no external dependencies beyond the services you configure (Supabase, Google Calendar, HotCRP).
+**Content Security Policy** is set via a `<meta>` tag in `index.html`, restricting script execution to hashed inline scripts and same-origin sources.
