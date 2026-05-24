@@ -886,8 +886,10 @@ function presenceFor(field) {
   const myKey = authStore.user?.id
   return Object.entries(_remotePresence.value)
     .filter(([k]) => k !== myKey)
-    .flatMap(([k, states]) => states.map(s => ({ ...s, key: k, color: _presenceColor(k) })))
-    .filter(s => s.field === field)
+    .flatMap(([k, states]) => {
+      const match = states.find(s => s.field === field)
+      return match ? [{ ...match, key: k, color: _presenceColor(k) }] : []
+    })
 }
 
 // Returns the first remote user actively typing in a field, with their live draft value.
