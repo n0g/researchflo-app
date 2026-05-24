@@ -394,14 +394,19 @@
               <div class="mcp-steps">
                 <div class="mcp-step">
                   <span class="mcp-step-num">1</span>
-                  <span>Copy the config snippet below.</span>
+                  <span>Select your Claude client, then copy the config snippet.</span>
                 </div>
                 <div class="mcp-step">
                   <span class="mcp-step-num">2</span>
                   <span>
-                    Merge it into your Claude config file:<br>
-                    <strong>Claude Code</strong> — <code class="inline-code">~/.claude/settings.json</code><br>
-                    <strong>Claude Desktop</strong> — <code class="inline-code">~/Library/Application Support/Claude/claude_desktop_config.json</code>
+                    Merge it into your config file:<br>
+                    <template v-if="mcpTarget === 'code'">
+                      <strong>Claude Code</strong> — <code class="inline-code">~/.claude.json</code> → <code class="inline-code">mcpServers</code>
+                    </template>
+                    <template v-else>
+                      <strong>Claude Desktop</strong> — <code class="inline-code">~/Library/Application Support/Claude/claude_desktop_config.json</code><br>
+                      <span style="font-size:0.85em;opacity:0.7">Requires Node.js. <code class="inline-code">mcp-remote</code> is downloaded automatically via npx.</span>
+                    </template>
                   </span>
                 </div>
                 <div class="mcp-step">
@@ -412,6 +417,13 @@
                     <em>"What tasks are overdue?"</em><br>
                     <em>"Move the UIST paper to Revision and set the deadline to September 15."</em>
                   </span>
+                </div>
+              </div>
+
+              <div v-if="mcpToken" class="mcp-target-toggle">
+                <div class="theme-segmented" role="group" aria-label="Claude client">
+                  <button class="theme-seg-btn" :class="{ active: mcpTarget === 'code' }" @click="mcpTarget = 'code'">Claude Code</button>
+                  <button class="theme-seg-btn" :class="{ active: mcpTarget === 'desktop' }" @click="mcpTarget = 'desktop'">Claude Desktop</button>
                 </div>
               </div>
 
@@ -711,17 +723,35 @@ const mcpToken = ref(null)
 const mcpCopied = ref(false)
 const mcpRegenerating = ref(false)
 
-const mcpConfigSnippet = computed(() => {
-  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/mcp`
+const mcpConfigUrl = computed(() => `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/mcp`)
+
+const mcpConfigSnippetCode = computed(() => {
   return JSON.stringify({
     mcpServers: {
       researchflo: {
-        url,
+        url: mcpConfigUrl.value,
         headers: { Authorization: `Bearer ${mcpToken.value ?? ''}` },
       },
     },
   }, null, 2)
 })
+
+const mcpConfigSnippetDesktop = computed(() => {
+  return JSON.stringify({
+    mcpServers: {
+      researchflo: {
+        command: 'npx',
+        args: ['-y', 'mcp-remote', mcpConfigUrl.value, '--header', `Authorization: Bearer ${mcpToken.value ?? ''}`],
+      },
+    },
+  }, null, 2)
+})
+
+const mcpTarget = ref('code')
+
+const mcpConfigSnippet = computed(() =>
+  mcpTarget.value === 'desktop' ? mcpConfigSnippetDesktop.value : mcpConfigSnippetCode.value
+)
 
 async function loadMcpToken() {
   const { data: { user } } = await supabase.auth.getUser()

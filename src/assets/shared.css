@@ -410,6 +410,9 @@ html[data-theme="dark"] .settings-sheet {
 }
 .mcp-step em { color: var(--text); font-style: italic; }
 .mcp-step strong { color: var(--text); font-weight: 600; }
+.mcp-target-toggle {
+  margin: 12px 0 0;
+}
 .mcp-tools-hint {
   margin: 12px 0 0;
   font-size: 12px;
