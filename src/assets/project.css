@@ -825,6 +825,7 @@ html[data-theme="dark"] .overdue-badge { color: var(--red); background: rgba(255
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  background: var(--bg-sidebar);
 }
 .inbox-page .sidebar-expand-btn { position: fixed; }
 
