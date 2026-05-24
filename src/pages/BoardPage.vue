@@ -108,13 +108,12 @@ function _setupBoardChannel() {
   if (_boardChannel) return
   const ch = supabase.channel('board')
   ch.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'projects' },
-    ({ new: n }) => { console.log('[board:rt] project update', n.id, n.name); store.applyRealtimeProject(n) })
+    ({ new: n }) => store.applyRealtimeProject(n))
   ch.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'project_members' },
-    ({ eventType, new: n, old: o }) => { console.log('[board:rt] member insert', n); store.applyRealtimeMember(eventType, n, o) })
+    ({ eventType, new: n, old: o }) => store.applyRealtimeMember(eventType, n, o))
   ch.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'project_members' },
-    ({ eventType, new: n, old: o }) => { console.log('[board:rt] member delete', o); store.applyRealtimeMember(eventType, n, o) })
+    ({ eventType, new: n, old: o }) => store.applyRealtimeMember(eventType, n, o))
   ch.subscribe(status => {
-    console.log('[board:rt] channel status:', status)
     if (status === 'SUBSCRIBED') clearTimeout(_boardReconnectTimer)
     if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
       _boardReconnectTimer = setTimeout(() => { _teardownBoardChannel(); _setupBoardChannel() }, 3000)
