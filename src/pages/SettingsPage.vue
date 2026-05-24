@@ -1,7 +1,41 @@
 <template>
   <f7-page name="settings" class="settings-page" no-swipeback>
     <div class="settings-screen">
-      <AppSidebar current-page="settings" />
+      <AppSidebar current-page="settings">
+        <template #filters>
+          <div class="sidebar-section-header" style="cursor:default; pointer-events:none">
+            <span class="sidebar-section-label">Jump to</span>
+          </div>
+          <button class="sidebar-nav-item" title="Appearance" @click="scrollTo('settings-appearance')">
+            <i class="ph ph-palette" aria-hidden="true"></i>
+            <span class="sidebar-label">Appearance</span>
+          </button>
+          <button class="sidebar-nav-item" title="Pipeline Stages" @click="scrollTo('settings-stages')">
+            <i class="ph ph-kanban" aria-hidden="true"></i>
+            <span class="sidebar-label">Pipeline Stages</span>
+          </button>
+          <button class="sidebar-nav-item" title="Collaborators" @click="scrollTo('settings-collaborators')">
+            <i class="ph ph-users" aria-hidden="true"></i>
+            <span class="sidebar-label">Collaborators</span>
+          </button>
+          <button class="sidebar-nav-item" title="HotCRP / Review Sites" @click="scrollTo('settings-reviews')">
+            <i class="ph ph-article" aria-hidden="true"></i>
+            <span class="sidebar-label">HotCRP</span>
+          </button>
+          <button class="sidebar-nav-item" title="Google Calendar" @click="scrollTo('settings-calendar')">
+            <i class="ph ph-calendar-dots" aria-hidden="true"></i>
+            <span class="sidebar-label">Calendar</span>
+          </button>
+          <button class="sidebar-nav-item" title="MCP Server" @click="scrollTo('settings-mcp')">
+            <i class="ph ph-plugs" aria-hidden="true"></i>
+            <span class="sidebar-label">MCP Server</span>
+          </button>
+          <button class="sidebar-nav-item" title="Account" @click="scrollTo('settings-account')">
+            <i class="ph ph-user-circle" aria-hidden="true"></i>
+            <span class="sidebar-label">Account</span>
+          </button>
+        </template>
+      </AppSidebar>
 
       <div class="settings-main">
         <button
@@ -18,7 +52,7 @@
           <h1 class="settings-page-title">Settings</h1>
 
           <!-- ── Appearance ── -->
-          <div class="settings-section">
+          <div id="settings-appearance" class="settings-section">
             <div class="settings-section-title">Appearance</div>
             <div class="settings-row-group">
               <div class="settings-row">
@@ -57,7 +91,7 @@
           </div>
 
           <!-- ── Pipeline Stages ── -->
-          <div class="settings-section">
+          <div id="settings-stages" class="settings-section">
             <div class="settings-section-title">Pipeline Stages</div>
             <div class="settings-card">
               <p class="settings-hint">Drag to reorder. Order determines column order on the board.</p>
@@ -111,7 +145,7 @@
           </div>
 
           <!-- ── Collaborators ── -->
-          <div class="settings-section">
+          <div id="settings-collaborators" class="settings-section">
             <div class="settings-section-title">Collaborators</div>
             <div class="settings-card">
               <p class="settings-hint">People in your projects who haven't joined yet. Add their email address and send them an invite.</p>
@@ -142,7 +176,7 @@
           </div>
 
           <!-- ── Review Sites ── -->
-          <div class="settings-section">
+          <div id="settings-reviews" class="settings-section">
             <div class="settings-section-title">Review Sites</div>
             <div class="settings-card">
               <div class="settings-subsection-label">Configured Sites</div>
@@ -191,7 +225,7 @@
           </div>
 
           <!-- ── Google Calendar ── -->
-          <div class="settings-section">
+          <div id="settings-calendar" class="settings-section">
             <div class="settings-section-title">Google Calendar</div>
             <template v-if="!calStore.isConnected">
               <div class="settings-card">
@@ -251,7 +285,7 @@
           </div>
 
           <!-- ── Account ── -->
-          <div class="settings-section">
+          <div id="settings-account" class="settings-section">
             <div class="settings-section-title">Account</div>
             <div class="settings-row-group">
               <div class="settings-row">
@@ -318,7 +352,7 @@
           </div>
 
           <!-- ── MCP Server ── -->
-          <div class="settings-section">
+          <div id="settings-mcp" class="settings-section">
             <div class="settings-section-title">MCP Server</div>
             <div class="settings-card">
               <p class="settings-hint">Let Claude read and update your projects and tasks directly using the Model Context Protocol.</p>
@@ -631,6 +665,10 @@ async function onDisplayNameChange(value) {
 }
 
 function signOut() { authStore.signOut() }
+
+function scrollTo(id) {
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
 
 // ── MCP Server ──
 const mcpToken = ref<string | null>(null)
