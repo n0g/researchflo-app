@@ -344,7 +344,7 @@ html[data-theme="dark"] .settings-sheet {
   border: 1px solid var(--border);
   border-radius: 10px;
   overflow: hidden;
-  margin: 4px 0 8px;
+  margin: 4px 16px 8px;
 }
 .passkey-list-card .passkey-row:not(:first-child) { border-top: 1px solid var(--border); }
 .passkey-row {
@@ -470,11 +470,14 @@ html[data-theme="dark"] .settings-sheet {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
-  transition: border-color 0.15s;
+  transition: background 0.1s, border-color 0.15s, box-shadow 0.15s;
 }
+.settings-inline-input:hover { background: var(--bg3); }
 .settings-inline-input:focus {
   outline: none;
+  background: var(--bg);
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
 .collab-invite-rows { display: flex; flex-direction: column; }

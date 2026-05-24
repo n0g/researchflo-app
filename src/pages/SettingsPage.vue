@@ -322,12 +322,20 @@
               <div class="settings-row-group" style="margin-bottom: 16px">
                 <div class="settings-row" style="padding: 13px 16px; margin: 0">
                   <span class="settings-row-label">Endpoint</span>
-                  <code class="mcp-token-code" style="user-select: all; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{ mcpConfigUrl }}</code>
+                  <div class="settings-row-right">
+                    <code class="mcp-token-code" style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{ mcpConfigUrl }}</code>
+                    <button class="btn icon" :title="mcpEndpointCopied ? 'Copied!' : 'Copy endpoint URL'" @click="copyToClipboard(mcpConfigUrl, mcpEndpointCopied)">
+                      <i :class="mcpEndpointCopied ? 'ph ph-check' : 'ph ph-copy'" aria-hidden="true"></i>
+                    </button>
+                  </div>
                 </div>
                 <div class="settings-row" style="padding: 13px 16px; margin: 0; border-top: 1px solid var(--border)">
                   <span class="settings-row-label">Authorization token</span>
                   <div class="settings-row-right">
                     <code class="mcp-token-code">{{ mcpToken ? mcpToken.slice(0, 8) + '…' : '…' }}</code>
+                    <button class="btn icon" :title="mcpTokenCopied ? 'Copied!' : 'Copy token'" @click="copyToClipboard(mcpToken, mcpTokenCopied)">
+                      <i :class="mcpTokenCopied ? 'ph ph-check' : 'ph ph-copy'" aria-hidden="true"></i>
+                    </button>
                     <button class="btn sm danger" :disabled="mcpRegenerating" title="Invalidates the current token — update your config after regenerating" @click="regenerateMcpToken">
                       {{ mcpRegenerating ? '…' : 'Regenerate' }}
                     </button>
@@ -729,6 +737,8 @@ function scrollTo(id) {
 // ── MCP Server ──
 const mcpToken = ref(null)
 const mcpCopied = ref(false)
+const mcpEndpointCopied = ref(false)
+const mcpTokenCopied = ref(false)
 const mcpRegenerating = ref(false)
 
 const mcpConfigUrl = computed(() => `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/mcp`)
@@ -771,11 +781,14 @@ async function loadMcpToken() {
   mcpToken.value = data?.mcp_token ?? null
 }
 
+async function copyToClipboard(text, flag) {
+  await navigator.clipboard.writeText(text).catch(() => {})
+  flag.value = true
+  setTimeout(() => { flag.value = false }, 2000)
+}
+
 async function copyMcpConfig() {
-  if (!mcpConfigSnippet.value) return
-  await navigator.clipboard.writeText(mcpConfigSnippet.value).catch(() => {})
-  mcpCopied.value = true
-  setTimeout(() => { mcpCopied.value = false }, 2000)
+  await copyToClipboard(mcpConfigSnippet.value, mcpCopied)
 }
 
 async function regenerateMcpToken() {
