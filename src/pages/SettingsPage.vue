@@ -114,7 +114,7 @@
           <div class="settings-section">
             <div class="settings-section-title">Collaborators</div>
             <div class="settings-card">
-              <p class="settings-hint">People in your projects who haven't joined yet. Add their email and copy the invite link to send them.</p>
+              <p class="settings-hint">People in your projects who haven't joined yet. Add their email address and send them an invite.</p>
               <div v-if="!pendingCollaborators.length" class="settings-empty">Everyone is already on the platform.</div>
               <div v-else class="collab-invite-rows">
                 <div v-for="person in pendingCollaborators" :key="person.id" class="collab-invite-row">
@@ -128,12 +128,13 @@
                     @keydown.enter.prevent="$event.target.blur()"
                   />
                   <button
-                    class="collab-invite-copy"
-                    :title="inviteCopied === person.id ? 'Copied!' : 'Copy invite link'"
-                    :aria-label="inviteCopied === person.id ? 'Copied!' : 'Copy invite link'"
-                    @click="copyInviteLink(person)"
+                    class="btn sm"
+                    :disabled="inviteSending === person.id || !person.email"
+                    :title="inviteSent === person.id ? 'Invite sent!' : 'Send invite email'"
+                    @click="sendInvite(person)"
                   >
-                    <i :class="inviteCopied === person.id ? 'ph ph-check' : 'ph ph-link-simple'" aria-hidden="true"></i>
+                    <i :class="inviteSent === person.id ? 'ph ph-check' : 'ph ph-paper-plane-tilt'" aria-hidden="true"></i>
+                    {{ inviteSent === person.id ? 'Sent' : inviteSending === person.id ? '…' : 'Invite' }}
                   </button>
                 </div>
               </div>
@@ -443,18 +444,25 @@ function addSite() {
 
 // ── Collaborators ──
 const pendingCollaborators = ref([])
-const inviteCopied = ref(null)
+const inviteSending = ref(null)
+const inviteSent = ref(null)
 
 async function loadPending() {
   pendingCollaborators.value = await boardStore.loadPendingCollaborators().catch(() => [])
 }
 
-function copyInviteLink(person) {
-  const base = window.location.origin + window.location.pathname
-  const url = `${base}?invite=${person.invite_token}`
-  navigator.clipboard.writeText(url)
-  inviteCopied.value = person.id
-  setTimeout(() => { inviteCopied.value = null }, 2000)
+async function sendInvite(person) {
+  if (!person.email) return
+  inviteSending.value = person.id
+  try {
+    await boardStore.sendInviteEmail(person.id, person.email)
+    inviteSent.value = person.id
+    setTimeout(() => { inviteSent.value = null }, 3000)
+  } catch (err) {
+    alert(err.message || 'Failed to send invite.')
+  } finally {
+    inviteSending.value = null
+  }
 }
 
 async function onEmailChange(person, value) {

@@ -345,18 +345,46 @@ export const useBoardStore = defineStore('board', () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return null
     const { data } = await supabase.from('people').select('id, display_name, email').eq('user_id', user.id).single()
-    return data
+    if (data) return data
+    // Owner has no people row yet — create one
+    const defaultName = user.user_metadata?.name || user.email?.split('@')[0] || ''
+    const { data: created } = await supabase
+      .from('people')
+      .insert({ user_id: user.id, display_name: defaultName, email: user.email || null })
+      .select('id, display_name, email')
+      .single()
+    return created
   }
 
   async function saveMyDisplayName(name) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-    await supabase.from('people').update({ display_name: name.trim() }).eq('user_id', user.id)
+    const { data: existing } = await supabase.from('people').select('id').eq('user_id', user.id).single()
+    if (existing) {
+      await supabase.from('people').update({ display_name: name.trim() }).eq('user_id', user.id)
+    } else {
+      await supabase.from('people').insert({ user_id: user.id, display_name: name.trim() })
+    }
   }
 
   async function savePersonEmail(personId, email) {
     const { error } = await supabase.from('people').update({ email: email.trim() || null }).eq('id', personId)
     if (error) throw new Error(error.message)
+  }
+
+  async function sendInviteEmail(personId, email) {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) throw new Error('Not authenticated')
+    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/invite-collaborator`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ personId, email }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || 'Failed to send invite')
+    // Update local state
+    const person = allPeople.value.find(p => p.id === personId)
+    if (person) person.email = email
   }
 
   async function claimInvite(token) {
@@ -566,6 +594,6 @@ export const useBoardStore = defineStore('board', () => {
     updateTaskTriage, createProject, deleteProject, setFilter,
     focusProjectIds, projectEnergy, cycleEnergy,
     addInboxTask, assignTaskToProject,
-    loadPendingCollaborators, claimInvite, loadMyProfile, saveMyDisplayName, savePersonEmail,
+    loadPendingCollaborators, claimInvite, loadMyProfile, saveMyDisplayName, savePersonEmail, sendInviteEmail,
   }
 })

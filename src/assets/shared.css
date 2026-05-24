@@ -389,10 +389,15 @@ html[data-theme="dark"] .settings-sheet {
   font-size: 13px;
   padding: 5px 9px;
   border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--bg-surface);
+  border: 1.5px solid var(--border);
+  background: var(--bg);
   color: var(--text);
   font-family: var(--font);
+  transition: border-color 0.15s;
+}
+.settings-inline-input:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 
 .collab-invite-rows { display: flex; flex-direction: column; }
