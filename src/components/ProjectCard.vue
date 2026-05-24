@@ -123,7 +123,19 @@ const scheduledHoursThisWeek = computed(() => {
 })
 
 const statusText = computed(() => props.project.status_text || '')
-const personLabels = computed(() => (props.project.members || []).map(m => m.person?.display_name).filter(Boolean))
+const personLabels = computed(() => {
+  const myId = store.myPeopleId
+  const seen = new Set()
+  const names = []
+  const op = props.project.owner_person
+  if (op && op.id !== myId) { seen.add(op.id); names.push(op.display_name) }
+  for (const m of (props.project.members || [])) {
+    if (!m.person || m.person.id === myId || seen.has(m.person.id)) continue
+    seen.add(m.person.id)
+    names.push(m.person.display_name)
+  }
+  return names
+})
 
 const staleDays = computed(() => {
   const ts = props.project.updated_at || props.project.created_at
