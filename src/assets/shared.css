@@ -231,6 +231,7 @@ html[data-theme="dark"] .settings-sheet {
   height: 100%;
   overflow: hidden;
 }
+.settings-page .sidebar-expand-btn { position: fixed; }
 .settings-page .page-content {
   flex: 1;
   display: flex;
