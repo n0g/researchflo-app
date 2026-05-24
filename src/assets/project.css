@@ -852,5 +852,5 @@ html[data-theme="dark"] .overdue-badge { color: var(--red); background: rgba(255
 .inbox-content {
   max-width: 560px;
 }
-.inbox-content .task-item { background: var(--bg-pane-right); }
-.inbox-content .task-quick-add-row { background: var(--bg-pane-right); }
+.inbox-content .task-item { background: var(--bg-sidebar); }
+.inbox-content .task-quick-add-row { background: var(--bg-sidebar); }
