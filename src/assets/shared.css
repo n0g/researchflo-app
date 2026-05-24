@@ -339,6 +339,14 @@ html[data-theme="dark"] .settings-sheet {
   color: var(--text3);
   padding: 4px 0 10px;
 }
+.passkey-list-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin: 4px 0 8px;
+}
+.passkey-list-card .passkey-row:not(:first-child) { border-top: 1px solid var(--border); }
 .passkey-row {
   display: flex;
   align-items: center;
@@ -347,6 +355,23 @@ html[data-theme="dark"] .settings-sheet {
   padding: 8px 16px;
   border-top: 1px solid var(--border);
 }
+.btn-icon-x {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: none;
+  border: none;
+  color: var(--text3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 18px;
+  transition: background 0.1s, color 0.1s;
+}
+.btn-icon-x:hover { background: rgba(239,68,68,0.08); color: var(--red); }
+.btn-icon-x:disabled { opacity: 0.4; cursor: default; }
 .passkey-row-info {
   display: flex;
   flex-direction: column;
@@ -413,11 +438,6 @@ html[data-theme="dark"] .settings-sheet {
 .mcp-step strong { color: var(--text); font-weight: 600; }
 .mcp-target-toggle {
   margin: 12px 0 0;
-}
-.mcp-tools-hint {
-  margin: 12px 0 0;
-  font-size: 12px;
-  line-height: 1.7;
 }
 .mcp-token-code {
   font-family: var(--font-code);

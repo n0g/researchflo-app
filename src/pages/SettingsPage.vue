@@ -10,9 +10,9 @@
             <i class="ph ph-palette" aria-hidden="true"></i>
             <span class="sidebar-label">Appearance</span>
           </button>
-          <button class="sidebar-nav-item" title="Pipeline Stages" @click="scrollTo('settings-stages')">
+          <button class="sidebar-nav-item" title="Kanban Stages" @click="scrollTo('settings-stages')">
             <i class="ph ph-kanban" aria-hidden="true"></i>
-            <span class="sidebar-label">Pipeline Stages</span>
+            <span class="sidebar-label">Kanban Stages</span>
           </button>
           <button class="sidebar-nav-item" title="Collaborators" @click="scrollTo('settings-collaborators')">
             <i class="ph ph-users" aria-hidden="true"></i>
@@ -124,9 +124,9 @@
             </div>
           </div>
 
-          <!-- ── Pipeline Stages ── -->
+          <!-- ── Kanban Stages ── -->
           <div id="settings-stages" class="settings-section">
-            <div class="settings-section-title">Pipeline Stages</div>
+            <div class="settings-section-title">Kanban Stages</div>
             <div class="settings-card">
               <p class="settings-hint">Drag to reorder. Order determines column order on the board.</p>
 
@@ -171,9 +171,6 @@
               <div v-if="stageError" class="error-msg" role="alert">{{ stageError }}</div>
               <div class="settings-actions">
                 <button class="btn sm" @click="addStageRow">+ Add stage</button>
-                <button class="btn sm primary" :disabled="savingStages" @click="saveStages">
-                  {{ savingStages ? 'Saving…' : 'Save stages' }}
-                </button>
               </div>
             </div>
           </div>
@@ -258,9 +255,9 @@
             </div>
           </div>
 
-          <!-- ── Google Calendar ── -->
+          <!-- ── Calendar ── -->
           <div id="settings-calendar" class="settings-section">
-            <div class="settings-section-title">Google Calendar</div>
+            <div class="settings-section-title">Calendar</div>
             <template v-if="!calStore.isConnected">
               <div class="settings-card">
                 <p class="settings-hint">Connect to schedule tasks to your Google Calendar from the Schedule page.</p>
@@ -318,83 +315,30 @@
             </template>
           </div>
 
-          <!-- ── Account ── -->
-          <div id="settings-account" class="settings-section">
-            <div class="settings-section-title">Account</div>
-            <div class="settings-row-group">
-              <div class="settings-row">
-                <span class="settings-row-label">Display name</span>
-                <input
-                  type="text"
-                  class="settings-inline-input"
-                  :value="displayName"
-                  placeholder="Your name"
-                  @change="onDisplayNameChange($event.target.value)"
-                  @keydown.enter.prevent="$event.target.blur()"
-                />
-              </div>
-              <div class="settings-row">
-                <span class="settings-row-label">Email</span>
-                <div class="settings-row-right">
-                  <span v-if="emailMsg" class="settings-inline-msg">{{ emailMsg }}</span>
-                  <input
-                    type="email"
-                    class="settings-inline-input"
-                    :value="emailDraft"
-                    :disabled="emailBusy"
-                    @change="emailDraft = $event.target.value"
-                    @keydown.enter.prevent="saveEmail"
-                  />
-                  <button
-                    v-if="emailDraft !== (authStore.user?.email || '')"
-                    class="btn sm"
-                    :disabled="emailBusy"
-                    @click="saveEmail"
-                  >{{ emailBusy ? '…' : 'Update' }}</button>
-                </div>
-              </div>
-              <template v-if="passkeySupported">
-                <div class="settings-row settings-row--passkey-header">
-                  <span class="settings-row-label">Passkeys</span>
-                  <div class="settings-row-right">
-                    <span v-if="passkeyMsg" class="settings-inline-msg">{{ passkeyMsg }}</span>
-                    <button class="btn sm" :disabled="passkeyBusy" @click="addPasskey">
-                      {{ passkeyBusy ? 'Adding…' : 'Add passkey' }}
-                    </button>
-                  </div>
-                </div>
-                <div v-if="passkeys.length === 0" class="passkey-empty">
-                  No passkeys registered.
-                </div>
-                <div v-for="pk in passkeys" :key="pk.id" class="passkey-row">
-                  <div class="passkey-row-info">
-                    <span class="passkey-row-label">{{ pk.device_label || 'Unknown device' }}</span>
-                    <span class="passkey-row-meta">Added {{ formatPasskeyDate(pk.created_at) }} · Last used {{ formatPasskeyDate(pk.last_used_at) }}</span>
-                  </div>
-                  <button
-                    class="btn sm danger"
-                    :disabled="deletingPasskeyId === pk.id"
-                    @click="removePasskey(pk.id)"
-                  >{{ deletingPasskeyId === pk.id ? '…' : 'Remove' }}</button>
-                </div>
-              </template>
-              <div class="settings-row">
-                <span class="settings-row-label">Signed in</span>
-                <button class="btn sm danger" @click="signOut">Sign out</button>
-              </div>
-            </div>
-          </div>
-
           <!-- ── MCP Server ── -->
           <div id="settings-mcp" class="settings-section">
             <div class="settings-section-title">MCP Server</div>
             <div class="settings-card">
-              <p class="settings-hint">Let Claude read and update your projects and tasks directly using the Model Context Protocol.</p>
+              <div class="settings-row-group" style="margin-bottom: 16px">
+                <div class="settings-row" style="padding: 13px 16px; margin: 0">
+                  <span class="settings-row-label">Endpoint</span>
+                  <code class="mcp-token-code" style="user-select: all; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{ mcpConfigUrl }}</code>
+                </div>
+                <div class="settings-row" style="padding: 13px 16px; margin: 0; border-top: 1px solid var(--border)">
+                  <span class="settings-row-label">Authorization token</span>
+                  <div class="settings-row-right">
+                    <code class="mcp-token-code">{{ mcpToken ? mcpToken.slice(0, 8) + '…' : '…' }}</code>
+                    <button class="btn sm danger" :disabled="mcpRegenerating" title="Invalidates the current token — update your config after regenerating" @click="regenerateMcpToken">
+                      {{ mcpRegenerating ? '…' : 'Regenerate' }}
+                    </button>
+                  </div>
+                </div>
+              </div>
 
               <div class="mcp-steps">
                 <div class="mcp-step">
                   <span class="mcp-step-num">1</span>
-                  <span>Select your Claude client, then copy the config snippet.</span>
+                  <span>Select your Claude client and copy the config snippet below.</span>
                 </div>
                 <div class="mcp-step">
                   <span class="mcp-step-num">2</span>
@@ -427,28 +371,83 @@
                 </div>
               </div>
 
-              <pre v-if="mcpToken" class="settings-code-block">{{ mcpConfigSnippet }}</pre>
-              <div v-if="!mcpToken" class="settings-hint">Loading…</div>
+              <pre v-if="mcpToken" class="settings-code-block" style="margin-top: 8px">{{ mcpConfigSnippet }}</pre>
+              <div v-if="!mcpToken" class="settings-hint" style="margin-top: 8px">Loading…</div>
 
-              <div v-if="mcpToken" class="settings-row" style="padding-top: 0">
-                <span class="settings-row-label">Token</span>
+              <div v-if="mcpToken" class="settings-actions" style="margin-top: 0">
+                <span v-if="mcpCopied" class="settings-inline-msg">Copied!</span>
+                <button class="btn sm" @click="copyMcpConfig">
+                  <i :class="mcpCopied ? 'ph ph-check' : 'ph ph-copy'" aria-hidden="true"></i>
+                  {{ mcpCopied ? 'Copied' : 'Copy config' }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── Account ── -->
+          <div id="settings-account" class="settings-section">
+            <div class="settings-section-title">Account</div>
+            <div class="settings-row-group">
+              <div class="settings-row">
+                <span class="settings-row-label">Display name</span>
+                <input
+                  type="text"
+                  class="settings-inline-input"
+                  :value="displayName"
+                  placeholder="Your name"
+                  @change="onDisplayNameChange($event.target.value)"
+                  @keydown.enter.prevent="$event.target.blur()"
+                />
+              </div>
+              <div class="settings-row">
+                <span class="settings-row-label">Email</span>
                 <div class="settings-row-right">
-                  <span v-if="mcpCopied" class="settings-inline-msg">Copied!</span>
-                  <code class="mcp-token-code">{{ mcpToken.slice(0, 8) }}…</code>
-                  <button class="btn sm" @click="copyMcpConfig">
-                    <i :class="mcpCopied ? 'ph ph-check' : 'ph ph-copy'" aria-hidden="true"></i>
-                    {{ mcpCopied ? 'Copied' : 'Copy config' }}
-                  </button>
-                  <button class="btn sm danger" :disabled="mcpRegenerating" title="Invalidates the current token and requires updating your config" @click="regenerateMcpToken">
-                    {{ mcpRegenerating ? '…' : 'Regenerate' }}
-                  </button>
+                  <span v-if="emailMsg" class="settings-inline-msg">{{ emailMsg }}</span>
+                  <input
+                    type="email"
+                    class="settings-inline-input"
+                    :value="emailDraft"
+                    :disabled="emailBusy"
+                    placeholder="Email address"
+                    @change="saveEmail($event.target.value)"
+                    @keydown.enter.prevent="$event.target.blur()"
+                  />
                 </div>
               </div>
-
-              <p class="settings-hint mcp-tools-hint">
-                <strong>Available tools:</strong>
-                list_projects · list_tasks · get_project_stats · get_stage_history · add_task · update_task · mark_task_complete · add_project · update_project
-              </p>
+              <template v-if="passkeySupported">
+                <div class="settings-row settings-row--passkey-header">
+                  <span class="settings-row-label">Passkeys</span>
+                  <div class="settings-row-right">
+                    <span v-if="passkeyMsg" class="settings-inline-msg">{{ passkeyMsg }}</span>
+                    <button class="btn sm" :disabled="passkeyBusy" @click="addPasskey">
+                      {{ passkeyBusy ? 'Adding…' : 'Add passkey' }}
+                    </button>
+                  </div>
+                </div>
+                <div class="passkey-list-card">
+                  <div v-if="passkeys.length === 0" class="passkey-empty" style="padding: 10px 12px; margin: 0">
+                    No passkeys registered.
+                  </div>
+                  <div v-for="pk in passkeys" :key="pk.id" class="passkey-row" style="padding: 8px 12px">
+                    <div class="passkey-row-info">
+                      <span class="passkey-row-label">{{ pk.device_label || 'Unknown device' }}</span>
+                      <span class="passkey-row-meta">Added {{ formatPasskeyDate(pk.created_at) }} · Last used {{ formatPasskeyDate(pk.last_used_at) }}</span>
+                    </div>
+                    <button
+                      class="btn-icon-x"
+                      :disabled="deletingPasskeyId === pk.id"
+                      :aria-label="'Remove passkey: ' + (pk.device_label || 'Unknown device')"
+                      @click="removePasskey(pk.id)"
+                    >
+                      <i :class="deletingPasskeyId === pk.id ? 'ph ph-circle-notch ph-spin' : 'ph ph-x-circle'" aria-hidden="true"></i>
+                    </button>
+                  </div>
+                </div>
+              </template>
+              <div class="settings-row">
+                <span class="settings-row-label">Signed in</span>
+                <button class="btn sm danger" @click="signOut">Sign out</button>
+              </div>
             </div>
           </div>
 
@@ -522,8 +521,9 @@ const rowsEl = ref(null)
 let keyCounter = 0
 const stageRows = ref((boardStore.stages || DEFAULT_STAGES).map(s => ({ ...s, icon: getStageIcon(s), key: keyCounter++ })))
 const stageError = ref('')
-const savingStages = ref(false)
 const openIconPickerKey = ref(null)
+let _stageAutoSaveTimer = null
+let _stageSkipWatch = false
 
 function addStageRow() {
   stageRows.value.push({ name: '', icon: 'kanban', key: keyCounter++ })
@@ -542,21 +542,28 @@ function closeIconPicker(e) {
   if (!e.target.closest('.icon-picker-wrap')) openIconPickerKey.value = null
 }
 
-async function saveStages() {
+async function autoSaveStages() {
   const stages = stageRows.value
     .map(r => ({ id: r.id ?? null, name: r.name.trim(), icon: r.icon || 'kanban' }))
     .filter(r => r.name)
-  if (!stages.length) { stageError.value = 'Add at least one stage.'; return }
+  if (!stages.length) return
   stageError.value = ''
-  savingStages.value = true
   try {
     await boardStore.saveStages(stages)
-    // Refresh rows from store so new IDs are picked up
+    _stageSkipWatch = true
     stageRows.value = (boardStore.stages || []).map(s => ({ ...s, icon: getStageIcon(s), key: keyCounter++ }))
-  } finally {
-    savingStages.value = false
+    await nextTick()
+    _stageSkipWatch = false
+  } catch {
+    stageError.value = 'Failed to save stages.'
   }
 }
+
+watch(stageRows, () => {
+  if (_stageSkipWatch) return
+  clearTimeout(_stageAutoSaveTimer)
+  _stageAutoSaveTimer = setTimeout(autoSaveStages, 800)
+}, { deep: true })
 
 // ── Sites ──
 const newSiteUrl = ref('')
@@ -665,8 +672,9 @@ async function loadDisplayName() {
   if (!emailDraft.value && authStore.user?.email) emailDraft.value = authStore.user.email
 }
 
-async function saveEmail() {
-  const trimmed = emailDraft.value.trim()
+async function saveEmail(value) {
+  const trimmed = (value ?? emailDraft.value).trim()
+  emailDraft.value = trimmed
   if (!trimmed || trimmed === authStore.user?.email) return
   emailBusy.value = true
   emailMsg.value = ''
