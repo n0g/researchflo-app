@@ -121,6 +121,7 @@ CREATE TABLE public.user_settings (
   user_id          uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   hotcrp_sites     jsonb,
   gcal_calendar_id text,
+  mcp_token        uuid DEFAULT gen_random_uuid(),
   theme            text DEFAULT 'auto',
   updated_at       timestamptz DEFAULT now()
 );

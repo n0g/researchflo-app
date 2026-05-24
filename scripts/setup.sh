@@ -80,6 +80,7 @@ FUNCTIONS=(
   passkey-delete
   invite-collaborator
   account-delete
+  mcp
 )
 
 for fn in "${FUNCTIONS[@]}"; do

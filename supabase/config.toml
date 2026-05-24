@@ -447,6 +447,11 @@ enabled = true
 verify_jwt = false
 entrypoint = "./functions/invite-collaborator/index.ts"
 
+[functions.mcp]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/mcp/index.ts"
+
 [functions.hotcrp-proxy]
 enabled = true
 verify_jwt = true

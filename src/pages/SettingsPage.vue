@@ -317,6 +317,61 @@
             </div>
           </div>
 
+          <!-- ── MCP Server ── -->
+          <div class="settings-section">
+            <div class="settings-section-title">MCP Server</div>
+            <div class="settings-card">
+              <p class="settings-hint">Let Claude read and update your projects and tasks directly using the Model Context Protocol.</p>
+
+              <div class="mcp-steps">
+                <div class="mcp-step">
+                  <span class="mcp-step-num">1</span>
+                  <span>Copy the config snippet below.</span>
+                </div>
+                <div class="mcp-step">
+                  <span class="mcp-step-num">2</span>
+                  <span>
+                    Merge it into your Claude config file:<br>
+                    <strong>Claude Code</strong> — <code class="inline-code">~/.claude/settings.json</code><br>
+                    <strong>Claude Desktop</strong> — <code class="inline-code">~/Library/Application Support/Claude/claude_desktop_config.json</code>
+                  </span>
+                </div>
+                <div class="mcp-step">
+                  <span class="mcp-step-num">3</span>
+                  <span>
+                    Ask Claude things like:<br>
+                    <em>"Give me a status overview of all my projects."</em><br>
+                    <em>"What tasks are overdue?"</em><br>
+                    <em>"Move the UIST paper to Revision and set the deadline to September 15."</em>
+                  </span>
+                </div>
+              </div>
+
+              <pre v-if="mcpToken" class="settings-code-block">{{ mcpConfigSnippet }}</pre>
+              <div v-if="!mcpToken" class="settings-hint">Loading…</div>
+
+              <div v-if="mcpToken" class="settings-row" style="padding-top: 0">
+                <span class="settings-row-label">Token</span>
+                <div class="settings-row-right">
+                  <span v-if="mcpCopied" class="settings-inline-msg">Copied!</span>
+                  <code class="mcp-token-code">{{ mcpToken.slice(0, 8) }}…</code>
+                  <button class="btn sm" @click="copyMcpConfig">
+                    <i :class="mcpCopied ? 'ph ph-check' : 'ph ph-copy'" aria-hidden="true"></i>
+                    {{ mcpCopied ? 'Copied' : 'Copy config' }}
+                  </button>
+                  <button class="btn sm danger" :disabled="mcpRegenerating" title="Invalidates the current token and requires updating your config" @click="regenerateMcpToken">
+                    {{ mcpRegenerating ? '…' : 'Regenerate' }}
+                  </button>
+                </div>
+              </div>
+
+              <p class="settings-hint mcp-tools-hint">
+                <strong>Available tools:</strong>
+                list_projects · list_tasks · get_project_stats · add_task · update_task · mark_task_complete · add_project · update_project
+              </p>
+            </div>
+          </div>
+
           <!-- ── Danger zone ── -->
           <div class="settings-section">
             <div class="settings-section-title">Danger zone</div>
@@ -347,7 +402,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useBoardStore } from '../stores/board.js'
 import { useAuthStore } from '../stores/auth.js'
 import { supabase } from '../lib/supabase.js'
@@ -577,7 +632,50 @@ async function onDisplayNameChange(value) {
 
 function signOut() { authStore.signOut() }
 
+// ── MCP Server ──
+const mcpToken = ref<string | null>(null)
+const mcpCopied = ref(false)
+const mcpRegenerating = ref(false)
 
+const mcpConfigSnippet = computed(() => {
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/mcp`
+  return JSON.stringify({
+    mcpServers: {
+      researchflo: {
+        type: 'http',
+        url,
+        headers: { Authorization: `Bearer ${mcpToken.value ?? ''}` },
+      },
+    },
+  }, null, 2)
+})
+
+async function loadMcpToken() {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return
+  // Ensure a user_settings row exists (DB default generates the token on INSERT)
+  await supabase.from('user_settings')
+    .upsert({ user_id: user.id }, { onConflict: 'user_id', ignoreDuplicates: true })
+  const { data } = await supabase.from('user_settings').select('mcp_token').eq('user_id', user.id).single()
+  mcpToken.value = data?.mcp_token ?? null
+}
+
+async function copyMcpConfig() {
+  if (!mcpConfigSnippet.value) return
+  await navigator.clipboard.writeText(mcpConfigSnippet.value).catch(() => {})
+  mcpCopied.value = true
+  setTimeout(() => { mcpCopied.value = false }, 2000)
+}
+
+async function regenerateMcpToken() {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return
+  mcpRegenerating.value = true
+  const newToken = crypto.randomUUID()
+  await supabase.from('user_settings').update({ mcp_token: newToken }).eq('user_id', user.id)
+  mcpToken.value = newToken
+  mcpRegenerating.value = false
+}
 
 onMounted(async () => {
   if (rowsEl.value) initSortable(rowsEl.value, stageRows)
@@ -585,6 +683,7 @@ onMounted(async () => {
   loadPending()
   loadDisplayName()
   loadPasskeys()
+  loadMcpToken()
 })
 
 onUnmounted(() => {
