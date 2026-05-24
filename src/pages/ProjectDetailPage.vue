@@ -38,7 +38,8 @@
               class="project-title project-title-input"
               rows="2"
               aria-label="Project title"
-              @blur="saveTitle"
+              @focus="trackField('title')"
+              @blur="saveTitle(); clearField()"
               @keydown.meta.enter.prevent="titleInputEl?.blur()"
               @keydown.escape.prevent="cancelTitle"
             ></textarea>
@@ -96,7 +97,7 @@
 
           <!-- Status -->
           <div class="meta-section">
-            <div class="meta-label">Status</div>
+            <div class="meta-label">Status<span v-for="p in presenceFor('status')" :key="p.key" class="presence-pill" :style="`--pcolor:${p.color}`">{{ p.displayName }}</span></div>
             <div
               v-if="!editingStatus"
               class="meta-editable"
@@ -115,7 +116,8 @@
               class="meta-textarea"
               rows="3"
               aria-label="Status"
-              @blur="saveStatus"
+              @focus="trackField('status')"
+              @blur="saveStatus(); clearField()"
               @keydown.escape.prevent="cancelStatus"
               @keydown.meta.enter.prevent="statusTextareaEl?.blur()"
             ></textarea>
@@ -156,7 +158,7 @@
           <div class="meta-row-pair">
             <!-- Venue (left) -->
             <div class="meta-section">
-              <div class="meta-label">Venue</div>
+              <div class="meta-label">Venue<span v-for="p in presenceFor('venue')" :key="p.key" class="presence-pill" :style="`--pcolor:${p.color}`">{{ p.displayName }}</span></div>
               <div
                 v-if="!editingVenue"
                 class="meta-editable"
@@ -176,7 +178,8 @@
                 type="text"
                 placeholder="e.g. PETS 2026"
                 aria-label="Venue"
-                @blur="saveVenue"
+                @focus="trackField('venue')"
+                @blur="saveVenue(); clearField()"
                 @keydown.enter.prevent="venueInputEl?.blur()"
                 @keydown.escape.prevent="cancelVenue"
               >
@@ -184,7 +187,7 @@
 
             <!-- Deadline (right) -->
             <div class="meta-section">
-              <div class="meta-label">Deadline</div>
+              <div class="meta-label">Deadline<span v-for="p in presenceFor('deadline')" :key="p.key" class="presence-pill" :style="`--pcolor:${p.color}`">{{ p.displayName }}</span></div>
               <template v-if="!editingDeadline">
                 <div class="deadline-view-row">
                   <div
@@ -213,8 +216,9 @@
                     type="date"
                     :value="deadlineDateValue"
                     aria-label="Deadline date"
+                    @focus="trackField('deadline')"
                     @change="onDeadlineChange"
-                    @blur="stopEditDeadline"
+                    @blur="stopEditDeadline(); clearField()"
                     @keydown.escape.prevent="stopEditDeadline"
                     @keydown.enter.prevent="dateInputEl?.blur()"
                   >
@@ -232,7 +236,7 @@
 
           <!-- Submission URL + status -->
           <div class="meta-section">
-            <div class="meta-label">Submission</div>
+            <div class="meta-label">Submission<span v-for="p in presenceFor('submission')" :key="p.key" class="presence-pill" :style="`--pcolor:${p.color}`">{{ p.displayName }}</span></div>
             <div class="submission-url-row">
               <div
                 v-if="!editingSubmission"
@@ -253,7 +257,8 @@
                 type="url"
                 placeholder="https://…"
                 aria-label="Submission URL"
-                @blur="saveSubmission"
+                @focus="trackField('submission')"
+                @blur="saveSubmission(); clearField()"
                 @keydown.enter.prevent="submissionInputEl?.blur()"
                 @keydown.escape.prevent="cancelSubmission"
               >
@@ -289,7 +294,7 @@
 
           <!-- Summary -->
           <div class="meta-section">
-            <div class="meta-label">Summary</div>
+            <div class="meta-label">Summary<span v-for="p in presenceFor('summary')" :key="p.key" class="presence-pill" :style="`--pcolor:${p.color}`">{{ p.displayName }}</span></div>
             <div
               v-if="!editingSummary"
               class="meta-editable"
@@ -308,7 +313,8 @@
               class="meta-textarea"
               rows="4"
               aria-label="Summary"
-              @blur="saveSummary"
+              @focus="trackField('summary')"
+              @blur="saveSummary(); clearField()"
               @keydown.escape.prevent="cancelSummary"
               @keydown.meta.enter.prevent="summaryTextareaEl?.blur()"
             ></textarea>
@@ -332,7 +338,10 @@
           </transition>
           <div class="tasks-header">
             <div class="tasks-title">Project Tasks</div>
-            <div class="tasks-subtitle">{{ tasks.length }} open task{{ tasks.length !== 1 ? 's' : '' }}</div>
+            <div class="tasks-subtitle">
+              {{ tasks.length }} open task{{ tasks.length !== 1 ? 's' : '' }}
+              <span v-for="p in presenceFor('task:new')" :key="p.key" class="presence-pill" :style="`--pcolor:${p.color}`">{{ p.displayName }} adding…</span>
+            </div>
           </div>
 
           <div
@@ -395,6 +404,7 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { f7 } from 'framework7-vue/bundle'
 import { useBoardStore } from '../stores/board.js'
 import { useAuthStore } from '../stores/auth.js'
+import { supabase } from '../lib/supabase.js'
 import { useReviewsStore } from '../stores/reviews.js'
 import { useSidebar } from '../composables/useSidebar.js'
 import { getStageIcon } from '../lib/helpers.js'
@@ -811,12 +821,14 @@ watch(tasks, (newVal) => {
 // ── Tasks ──
 function startAddTask() {
   addingTask.value = true
+  trackField('task:new')
   nextTick(() => quickAddInputEl.value?.focus())
 }
 
 function cancelAddTask() {
   addingTask.value = false
   newTaskContent.value = ''
+  clearField()
 }
 
 async function submitAddTask() {
@@ -833,6 +845,7 @@ function onQuickAddBlur() {
   if (content && project.value) store.quickAddTask(content, project.value.id).catch(console.error)
   newTaskContent.value = ''
   addingTask.value = false
+  clearField()
 }
 
 // ── Delete project ──
@@ -846,15 +859,69 @@ async function confirmDelete() {
 // ── Navigation ──
 function goBack() { f7.view.current.router.back() }
 
+// ── Realtime collaboration ─────────────────────────────────────────────────
+
+const _channel = ref(null)
+const _remotePresence = ref({}) // presenceKey → [{ displayName, field }]
+
+const _PRESENCE_COLORS = ['#6366f1','#ec4899','#f59e0b','#10b981','#3b82f6','#ef4444','#8b5cf6','#0ea5e9']
+function _presenceColor(key) {
+  let h = 0
+  for (const c of String(key)) h = (h * 31 + c.charCodeAt(0)) >>> 0
+  return _PRESENCE_COLORS[h % _PRESENCE_COLORS.length]
+}
+
+function presenceFor(field) {
+  const myKey = authStore.user?.id
+  return Object.entries(_remotePresence.value)
+    .filter(([k]) => k !== myKey)
+    .flatMap(([k, states]) => states.map(s => ({ ...s, key: k, color: _presenceColor(k) })))
+    .filter(s => s.field === field)
+}
+
+function trackField(field) {
+  const name = store.allPeople.find(p => p.id === store.myPeopleId)?.display_name || authStore.user?.email?.split('@')[0] || '?'
+  _channel.value?.track({ displayName: name, field })
+}
+function clearField() {
+  const name = store.allPeople.find(p => p.id === store.myPeopleId)?.display_name || authStore.user?.email?.split('@')[0] || '?'
+  _channel.value?.track({ displayName: name, field: null })
+}
+
+function _setupChannel() {
+  if (_channel.value) return
+  const pid = projectId.value
+  if (!pid || !authStore.user) return
+  const ch = supabase.channel(`project-detail:${pid}`, {
+    config: { presence: { key: authStore.user.id } }
+  })
+  ch.on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: `project_id=eq.${pid}` },
+    ({ eventType, new: n, old: o }) => store.applyRealtimeTask(eventType, n, o))
+  ch.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'projects', filter: `id=eq.${pid}` },
+    ({ new: n }) => store.applyRealtimeProject(n))
+  ch.on('presence', { event: 'sync' }, () => { _remotePresence.value = { ...ch.presenceState() } })
+  ch.subscribe(status => {
+    if (status === 'SUBSCRIBED') trackField(null)
+  })
+  _channel.value = ch
+}
+
+function _teardownChannel() {
+  if (_channel.value) { supabase.removeChannel(_channel.value); _channel.value = null }
+  _remotePresence.value = {}
+}
+
 onMounted(async () => {
   document.addEventListener('click', onDocClick)
   store.initStages()
   await store.loadIfStale()
+  _setupChannel()
   if (submissionUrl.value && matchedSite.value && paperIdFromUrl.value) loadSubmissionStatus()
 })
 
 onUnmounted(() => {
   document.removeEventListener('click', onDocClick)
   clearTimeout(celebrationTimer)
+  _teardownChannel()
 })
 </script>

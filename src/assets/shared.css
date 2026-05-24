@@ -619,6 +619,35 @@ html[data-theme="light"] .task-due-right.due-soon { color: #b45309; }
   white-space: nowrap;
 }
 
+/* ── REALTIME PRESENCE PILLS ── */
+.presence-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 7px 1px 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--pcolor) 12%, transparent);
+  color: var(--pcolor);
+  vertical-align: middle;
+  margin-left: 6px;
+  letter-spacing: 0.01em;
+}
+.presence-pill::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--pcolor);
+  flex-shrink: 0;
+  animation: presence-pulse 1.8s ease-in-out infinite;
+}
+@keyframes presence-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }

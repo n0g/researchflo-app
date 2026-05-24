@@ -434,6 +434,29 @@ export const useBoardStore = defineStore('board', () => {
     _userEnergy.value = new Map(_userEnergy.value).set(projectId, next)
   }
 
+  function applyRealtimeTask(event, newRow, oldRow) {
+    if (event === 'DELETE') {
+      tasks.value = tasks.value.filter(t => t.id !== oldRow.id)
+      return
+    }
+    if (newRow.is_completed) {
+      tasks.value = tasks.value.filter(t => t.id !== newRow.id)
+      return
+    }
+    const transformed = _transformTask(newRow)
+    const idx = tasks.value.findIndex(t => t.id === transformed.id)
+    if (idx >= 0) tasks.value.splice(idx, 1, transformed)
+    else tasks.value.push(transformed)
+  }
+
+  function applyRealtimeProject(newRow) {
+    const idx = projects.value.findIndex(p => p.id === newRow.id)
+    if (idx < 0) return
+    const existing = projects.value[idx]
+    // Preserve joined data (members, owner_person) which realtime doesn't include
+    projects.value.splice(idx, 1, { ...existing, ...newRow, members: existing.members, owner_person: existing.owner_person })
+  }
+
   async function renameProject(projectId, name) {
     const { error } = await supabase.from('projects').update({ name }).eq('id', projectId)
     if (error) throw new Error(error.message)
@@ -624,5 +647,6 @@ export const useBoardStore = defineStore('board', () => {
     focusProjectIds, projectEnergy, cycleEnergy,
     addInboxTask, assignTaskToProject,
     loadPendingCollaborators, claimInvite, loadMyProfile, saveMyDisplayName, savePersonEmail, sendInviteEmail,
+    applyRealtimeTask, applyRealtimeProject,
   }
 })
