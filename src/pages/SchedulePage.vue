@@ -296,6 +296,7 @@ import { f7 } from 'framework7-vue/bundle'
 import { useBoardStore } from '../stores/board.js'
 import { useCalendarStore } from '../stores/calendar.js'
 import { useSidebar } from '../composables/useSidebar.js'
+import { useSchedulePrefs } from '../composables/useSchedulePrefs.js'
 import { getLabel, getUrgencyLabel, getImportance, getTime } from '../composables/useTaskTriage.js'
 import { useRelativeDateGroups } from '../composables/useRelativeDateGroups.js'
 import { parseTaskContent } from '../lib/helpers.js'
@@ -312,6 +313,7 @@ import AppTabbar from '../components/AppTabbar.vue'
 const store = useBoardStore()
 const calStore = useCalendarStore()
 const { sidebarCollapsed, toggleSidebar } = useSidebar()
+const schedPrefs = useSchedulePrefs()
 const taskListBodyEl = ref(null)
 
 // ── Task list ──
@@ -398,10 +400,8 @@ function scheduledLabel(task) {
   const start = ev ? new Date(ev.start.dateTime || ev.start.date) : new Date(iso)
   const datePart = start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
   if (ev && !ev.start.dateTime) return datePart
-  const h = start.getHours(), m = start.getMinutes()
-  const h12 = h % 12 || 12
-  const period = h >= 12 ? 'pm' : 'am'
-  const timePart = m === 0 ? `${h12}${period}` : `${h12}:${String(m).padStart(2, '0')}${period}`
+  const hour12 = schedPrefs.timeFormat.value !== '24h'
+  const timePart = start.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12 })
   return `${datePart} ${timePart}`
 }
 
@@ -423,16 +423,20 @@ const SLOT_HEIGHT = 40
 const START_HOUR = 7
 const END_HOUR = 21
 
-function getMonday(d) {
+function getWeekStart(d) {
   const day = new Date(d)
-  const dow = day.getDay()
-  const diff = dow === 0 ? -6 : 1 - dow
-  day.setDate(day.getDate() + diff)
+  const dow = day.getDay() // 0=Sun … 6=Sat
+  if (schedPrefs.weekStartDay.value === 'sunday') {
+    day.setDate(day.getDate() - dow)
+  } else {
+    const diff = dow === 0 ? -6 : 1 - dow
+    day.setDate(day.getDate() + diff)
+  }
   day.setHours(0, 0, 0, 0)
   return day
 }
 
-const weekStart = ref(getMonday(new Date()))
+const weekStart = ref(getWeekStart(new Date()))
 const calBodyEl = ref(null)
 const calDaysEl = ref(null)
 
@@ -468,6 +472,7 @@ function isToday(d) { return isoDate(d) === isoDate(new Date()) }
 function dayName(d) { return d.toLocaleDateString(undefined, { weekday: 'short' }) }
 
 function formatHour(h) {
+  if (schedPrefs.timeFormat.value === '24h') return `${String(h).padStart(2, '0')}:00`
   if (h === 12) return '12pm'
   return h > 12 ? `${h - 12}pm` : `${h}am`
 }
@@ -487,7 +492,7 @@ async function nextWeek() {
 }
 
 function goToday() {
-  weekStart.value = getMonday(new Date())
+  weekStart.value = getWeekStart(new Date())
   calStore.loadWeekEvents(weekStart.value)
 }
 
@@ -516,7 +521,8 @@ function eventStyle(ev) {
 
 function eventTimeStr(ev) {
   if (!ev.start?.dateTime) return ''
-  return new Date(ev.start.dateTime).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  const hour12 = schedPrefs.timeFormat.value !== '24h'
+  return new Date(ev.start.dateTime).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12 })
 }
 
 
@@ -566,7 +572,8 @@ function importEventTimeStr(ev) {
   const start = new Date(ev.start.dateTime || ev.start.date)
   const date = start.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
   if (!ev.start.dateTime) return date
-  const time = start.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  const hour12 = schedPrefs.timeFormat.value !== '24h'
+  const time = start.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12 })
   return `${date} at ${time}`
 }
 
@@ -577,8 +584,9 @@ async function importEventAsTask() {
     const ev = importingEvent.value
     const isoDatetime = ev.start.dateTime || (ev.start.date + 'T09:00:00')
     const d = new Date(isoDatetime)
+    const hour12 = schedPrefs.timeFormat.value !== '24h'
     const readable = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) +
-      ' at ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+      ' at ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12 })
     const scheduledLine = `📅 Scheduled: ${readable} (${isoDatetime})`
     const task = await store.addInboxTask(ev.summary, scheduledLine)
     await calStore.linkEventToTask(ev.id, ev._calId, task.id)

@@ -87,6 +87,40 @@
                   >Dark</button>
                 </div>
               </div>
+              <div class="settings-row">
+                <span class="settings-row-label">Week starts on</span>
+                <div class="theme-segmented" role="group" aria-label="Week starts on">
+                  <button
+                    class="theme-seg-btn"
+                    :class="{ active: weekStartDay === 'monday' }"
+                    :aria-pressed="weekStartDay === 'monday'"
+                    @click="setWeekStartDay('monday')"
+                  >Monday</button>
+                  <button
+                    class="theme-seg-btn"
+                    :class="{ active: weekStartDay === 'sunday' }"
+                    :aria-pressed="weekStartDay === 'sunday'"
+                    @click="setWeekStartDay('sunday')"
+                  >Sunday</button>
+                </div>
+              </div>
+              <div class="settings-row">
+                <span class="settings-row-label">Time format</span>
+                <div class="theme-segmented" role="group" aria-label="Time format">
+                  <button
+                    class="theme-seg-btn"
+                    :class="{ active: timeFormat === '12h' }"
+                    :aria-pressed="timeFormat === '12h'"
+                    @click="setTimeFormat('12h')"
+                  >12-hour</button>
+                  <button
+                    class="theme-seg-btn"
+                    :class="{ active: timeFormat === '24h' }"
+                    :aria-pressed="timeFormat === '24h'"
+                    @click="setTimeFormat('24h')"
+                  >24-hour</button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -445,6 +479,7 @@ import { useCalendarStore } from '../stores/calendar.js'
 import { useSidebar } from '../composables/useSidebar.js'
 import { useTheme } from '../composables/useTheme.js'
 import { useAccentColor } from '../composables/useAccentColor.js'
+import { useSchedulePrefs } from '../composables/useSchedulePrefs.js'
 import { DEFAULT_STAGES, getStageIcon } from '../lib/helpers.js'
 import { initSortable } from '../lib/sortable.js'
 import { registerPasskey, listPasskeys, deletePasskey, isPasskeySupported } from '../lib/passkey.js'
@@ -462,6 +497,7 @@ function saveGcalClientId() { calStore.saveClientId(gcalClientIdDraft.value) }
 const { sidebarCollapsed, toggleSidebar } = useSidebar()
 const { setTheme, themePref } = useTheme()
 const { accentColor, setColor: setAccentColor } = useAccentColor()
+const { weekStartDay, timeFormat, setWeekStartDay, setTimeFormat } = useSchedulePrefs()
 
 // ── Stages ──
 const STAGE_ICONS = [
@@ -671,7 +707,7 @@ function scrollTo(id) {
 }
 
 // ── MCP Server ──
-const mcpToken = ref<string | null>(null)
+const mcpToken = ref(null)
 const mcpCopied = ref(false)
 const mcpRegenerating = ref(false)
 
