@@ -834,6 +834,7 @@ html[data-theme="dark"] .overdue-badge { color: var(--red); background: rgba(255
   overflow-y: auto;
   padding: calc(32px + env(safe-area-inset-top)) 48px 32px;
   background: var(--bg-sidebar);
+  --bg-surface: var(--bg-sidebar);
   transition: margin-left 0.3s cubic-bezier(0.16, 1.08, 0.3, 1);
 }
 @media (max-width: 767px) {
@@ -852,5 +853,3 @@ html[data-theme="dark"] .overdue-badge { color: var(--red); background: rgba(255
 .inbox-content {
   max-width: 560px;
 }
-.inbox-content .task-item { background: var(--bg-sidebar); }
-.inbox-content .task-quick-add-row { background: var(--bg-sidebar); }
