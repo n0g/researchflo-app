@@ -191,13 +191,17 @@ export async function registerPasskey() {
         id: b64urlToBuffer(c.id),
       })),
     }
+    console.log('[passkey] calling credentials.create, rpId:', publicKeyOptions.rp?.id)
     cred = await navigator.credentials.create({ publicKey: publicKeyOptions })
+    console.log('[passkey] credentials.create result:', cred ? `ok (id=${cred.id?.slice(0,12)}…)` : 'null')
   } catch (err) {
+    console.error('[passkey] credentials.create threw:', err.name, err.message)
     if (err.name === 'NotAllowedError') throw new Error('cancelled')
     throw err
   }
   if (!cred) throw new Error('No credential created')
 
+  console.log('[passkey] calling register-finish')
   await callFn(
     'passkey-register-finish',
     { challengeId, credential: encodeAttestationCredential(cred), deviceLabel: getDeviceLabel() },
