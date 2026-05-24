@@ -888,6 +888,8 @@ function clearField() {
   _channel.value?.track({ displayName: name, field: null })
 }
 
+let _reconnectTimer = null
+
 function _setupChannel() {
   if (_channel.value) return
   const pid = projectId.value
@@ -901,19 +903,27 @@ function _setupChannel() {
     ({ new: n }) => store.applyRealtimeProject(n))
   ch.on('presence', { event: 'sync' }, () => { _remotePresence.value = { ...ch.presenceState() } })
   ch.subscribe(status => {
-    console.log('[realtime] channel status:', status)
-    if (status === 'SUBSCRIBED') trackField(null)
+    if (status === 'SUBSCRIBED') { clearTimeout(_reconnectTimer); trackField(null) }
+    if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+      _reconnectTimer = setTimeout(() => { _teardownChannel(); _setupChannel() }, 3000)
+    }
   })
   _channel.value = ch
 }
 
 function _teardownChannel() {
+  clearTimeout(_reconnectTimer)
   if (_channel.value) { supabase.removeChannel(_channel.value); _channel.value = null }
   _remotePresence.value = {}
 }
 
+function _onVisibilityChange() {
+  if (document.visibilityState === 'visible' && !_channel.value) _setupChannel()
+}
+
 onMounted(async () => {
   document.addEventListener('click', onDocClick)
+  document.addEventListener('visibilitychange', _onVisibilityChange)
   store.initStages()
   await store.loadIfStale()
   _setupChannel()
@@ -922,6 +932,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   document.removeEventListener('click', onDocClick)
+  document.removeEventListener('visibilitychange', _onVisibilityChange)
   clearTimeout(celebrationTimer)
   _teardownChannel()
 })
