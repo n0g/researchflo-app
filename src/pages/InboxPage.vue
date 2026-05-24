@@ -133,7 +133,9 @@ const newTaskContent = ref('')
 const quickAddInputEl = ref(null)
 
 const inboxTasks = computed(() =>
-  store.tasks.filter(t => t.project_id == null && !t.is_completed)
+  store.tasks
+    .filter(t => t.project_id == null && !t.is_completed)
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
 )
 
 function startAdd() {

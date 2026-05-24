@@ -155,7 +155,7 @@ export const useBoardStore = defineStore('board', () => {
         { data: stagesData,   error: stageErr },
       ] = await Promise.all([
         supabase.from('projects').select('*, members:project_members(person:people(id, display_name, user_id, email, invite_token))').order('name'),
-        supabase.from('tasks').select('*').eq('is_completed', false),
+        supabase.from('tasks').select('*').eq('is_completed', false).order('sort_order', { ascending: true }),
         supabase.from('stages').select('*'),
       ])
 
