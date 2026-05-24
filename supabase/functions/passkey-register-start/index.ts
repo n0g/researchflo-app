@@ -50,7 +50,17 @@ Deno.serve(async (req) => {
   // Fetch full user record via admin to ensure email is present
   const { data: { user: fullUser } } = await admin.auth.admin.getUserById(user.id)
   const userEmail = fullUser?.email || user.email || user.id
-  const userDisplayName = (fullUser?.user_metadata?.name as string) || fullUser?.email || userEmail
+
+  // Prefer the user-set display name from the people table
+  const { data: person } = await admin
+    .from('people')
+    .select('display_name')
+    .eq('user_id', user.id)
+    .maybeSingle()
+  const userDisplayName = person?.display_name
+    || (fullUser?.user_metadata?.name as string)
+    || fullUser?.email
+    || userEmail
 
   const encoder = new TextEncoder()
   const options = await generateRegistrationOptions({
