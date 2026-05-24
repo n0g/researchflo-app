@@ -207,8 +207,12 @@ CREATE POLICY "people_select" ON public.people
       WHERE pm.person_id = people.id AND p.owner_id = auth.uid()
     )
   );
+-- Invite someone to a project
 CREATE POLICY "people_insert" ON public.people
   FOR INSERT WITH CHECK (invited_by = auth.uid());
+-- Create your own profile row (e.g. owner who predates the trigger)
+CREATE POLICY "people_insert_self" ON public.people
+  FOR INSERT WITH CHECK (user_id = auth.uid());
 CREATE POLICY "people_update_own" ON public.people
   FOR UPDATE USING (user_id = auth.uid());
 CREATE POLICY "people_claim_invite" ON public.people
