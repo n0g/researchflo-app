@@ -298,10 +298,10 @@ function startTitleEdit() {
 }
 
 async function saveTitle() {
-  editingTitle.value = false
   const val = titleInputEl.value?.value?.trim()
+  editingTitle.value = false
   if (val && val !== props.task.content) {
-    await store.updateStatusText(props.task.id, val).catch(console.error)
+    await store.updateTaskContent(props.task.id, val).catch(console.error)
   }
 }
 

@@ -546,6 +546,13 @@ export const useBoardStore = defineStore('board', () => {
     if (task) task.project_id = projectId
   }
 
+  async function updateTaskContent(taskId, content) {
+    const { error } = await supabase.from('tasks').update({ content }).eq('id', taskId)
+    if (error) throw new Error(error.message)
+    const task = tasks.value.find(t => t.id === taskId)
+    if (task) task.content = content
+  }
+
   async function updateTaskDue(taskId, dateVal) {
     const { error } = await supabase.from('tasks').update({ due_date: dateVal || null }).eq('id', taskId)
     if (error) throw new Error(error.message)
@@ -638,7 +645,7 @@ export const useBoardStore = defineStore('board', () => {
     excludedSectionIds, deadlineSectionIds, allCollaborators, allVenues, allPeople, setupStatus, myPeopleId,
     initStages, saveToken, saveStages, resetToken, loadData, loadIfStale,
     projectStage, projectStatusTask, projectMeta, projectTasks, projectDeadline,
-    moveStage, completeTask, deleteTask, reorderTasks, quickAddTask, updateTaskDue,
+    moveStage, completeTask, deleteTask, reorderTasks, quickAddTask, updateTaskContent, updateTaskDue,
     saveGCalEvent, saveScheduledTime, clearScheduledTime, updateStatusText,
     updateVenue, setDeadlineDate, addCollaborator, removeCollaborator, renameProject,
     projectDeadlineTaskBase, projectDeadlineTaskObj,
