@@ -102,9 +102,9 @@ async function signInWithPasskey() {
   busy.value = true
   try {
     const result = await tryDiscoverableAuth()
-    if (!result) errorMsg.value = 'No passkey found or sign-in was cancelled.'
+    if (!result) errorMsg.value = 'No passkey found — enter your email below and click Sign in.'
   } catch (err) {
-    errorMsg.value = err.message || 'Passkey sign-in failed.'
+    errorMsg.value = err.message || 'Passkey sign-in failed — try entering your email below.'
   } finally {
     busy.value = false
   }

@@ -34,19 +34,16 @@ Deno.serve(async (req) => {
   let hasPasskey = false
 
   if (email) {
-    // Look up user via people table (bridge between email and auth.users)
-    const { data: person } = await admin
-      .from('people')
-      .select('user_id')
-      .eq('email', email)
-      .not('user_id', 'is', null)
-      .maybeSingle()
+    // Look up user by email directly via auth admin API
+    const { data: { users } } = await admin.auth.admin.listUsers({ perPage: 1000 })
+    const authUser = users.find((u) => u.email?.toLowerCase() === email.toLowerCase())
+    const userId = authUser?.id
 
-    if (person?.user_id) {
+    if (userId) {
       const { data: passkeys } = await admin
         .from('passkeys')
         .select('credential_id')
-        .eq('user_id', person.user_id)
+        .eq('user_id', userId)
 
       if (passkeys?.length) {
         hasPasskey = true

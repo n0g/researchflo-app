@@ -110,9 +110,9 @@ export async function tryDiscoverableAuth() {
       },
     })
   } catch (err) {
-    // User cancelled or no passkey available — not an error
-    if (err.name === 'NotAllowedError' || err.name === 'AbortError' || err.name === 'NotSupportedError') return null
-    return null
+    if (err.name === 'NotAllowedError' || err.name === 'AbortError') return null
+    // Re-throw unexpected errors so the caller can surface them
+    throw err
   }
   if (!cred) return null
 
