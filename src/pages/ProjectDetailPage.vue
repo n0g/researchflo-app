@@ -901,6 +901,7 @@ function _setupChannel() {
     ({ new: n }) => store.applyRealtimeProject(n))
   ch.on('presence', { event: 'sync' }, () => { _remotePresence.value = { ...ch.presenceState() } })
   ch.subscribe(status => {
+    console.log('[realtime] channel status:', status)
     if (status === 'SUBSCRIBED') trackField(null)
   })
   _channel.value = ch
