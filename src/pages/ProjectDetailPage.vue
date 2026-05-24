@@ -873,7 +873,8 @@ function goBack() { f7.view.current.router.back() }
 // ── Realtime collaboration ─────────────────────────────────────────────────
 
 const _channel = ref(null)
-const _remotePresence = ref({}) // presenceKey → [{ displayName, field }]
+const _remotePresence = ref({})  // presenceKey → [{ displayName, field }] — drives pills
+const _remoteDrafts = ref({})    // userId → { field, value, displayName, color } — drives live values
 
 const _PRESENCE_COLORS = ['#6366f1','#ec4899','#f59e0b','#10b981','#3b82f6','#ef4444','#8b5cf6','#0ea5e9']
 function _presenceColor(key) {
@@ -894,16 +895,26 @@ function presenceFor(field) {
 
 // Returns the first remote user actively typing in a field, with their live draft value.
 function remoteDraft(field) {
-  return presenceFor(field).find(s => s.value != null) ?? null
+  return Object.values(_remoteDrafts.value).find(d => d.field === field) ?? null
+}
+
+function _myName() {
+  return store.allPeople.find(p => p.id === store.myPeopleId)?.display_name || authStore.user?.email?.split('@')[0] || '?'
 }
 
 function trackField(field, value) {
-  const name = store.allPeople.find(p => p.id === store.myPeopleId)?.display_name || authStore.user?.email?.split('@')[0] || '?'
-  _channel.value?.track({ displayName: name, field, value: value ?? null })
+  const name = _myName()
+  // Presence: low-frequency field tracking for pills
+  _channel.value?.track({ displayName: name, field: field ?? null })
+  // Broadcast: high-frequency draft value for live typing
+  _channel.value?.send({ type: 'broadcast', event: 'draft',
+    payload: { userId: authStore.user?.id, displayName: name, field: field ?? null, value: value ?? null } })
 }
 function clearField() {
-  const name = store.allPeople.find(p => p.id === store.myPeopleId)?.display_name || authStore.user?.email?.split('@')[0] || '?'
-  _channel.value?.track({ displayName: name, field: null, value: null })
+  const name = _myName()
+  _channel.value?.track({ displayName: name, field: null })
+  _channel.value?.send({ type: 'broadcast', event: 'draft',
+    payload: { userId: authStore.user?.id, displayName: name, field: null, value: null } })
 }
 
 let _reconnectTimer = null
@@ -913,7 +924,7 @@ function _setupChannel() {
   const pid = projectId.value
   if (!pid || !authStore.user) return
   const ch = supabase.channel(`project-detail:${pid}`, {
-    config: { presence: { key: authStore.user.id } }
+    config: { presence: { key: authStore.user.id }, broadcast: { self: false } }
   })
   ch.on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: `project_id=eq.${pid}` },
     ({ eventType, new: n, old: o }) => store.applyRealtimeTask(eventType, n, o))
@@ -922,6 +933,13 @@ function _setupChannel() {
   ch.on('presence', { event: 'sync' }, () => { _remotePresence.value = { ...ch.presenceState() } })
   ch.on('presence', { event: 'join' }, () => { _remotePresence.value = { ...ch.presenceState() } })
   ch.on('presence', { event: 'leave' }, () => { _remotePresence.value = { ...ch.presenceState() } })
+  ch.on('broadcast', { event: 'draft' }, ({ payload }) => {
+    const { userId, displayName, field, value } = payload
+    if (!userId || userId === authStore.user?.id) return
+    const drafts = { ..._remoteDrafts.value }
+    if (field == null) { delete drafts[userId] } else { drafts[userId] = { field, value, displayName, color: _presenceColor(userId) } }
+    _remoteDrafts.value = drafts
+  })
   ch.subscribe(status => {
     if (status === 'SUBSCRIBED') { clearTimeout(_reconnectTimer); trackField(null) }
     if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
@@ -935,6 +953,7 @@ function _teardownChannel() {
   clearTimeout(_reconnectTimer)
   if (_channel.value) { supabase.removeChannel(_channel.value); _channel.value = null }
   _remotePresence.value = {}
+  _remoteDrafts.value = {}
 }
 
 function _onVisibilityChange() {
