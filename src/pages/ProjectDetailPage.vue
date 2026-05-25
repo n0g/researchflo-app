@@ -904,6 +904,7 @@ function _myName() {
 }
 
 function trackCursor(field, e) {
+  if (e.key === 'Enter' || e.key === 'Escape') return
   trackField(field, e.target.value, e.target.selectionStart)
 }
 
