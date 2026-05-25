@@ -46,12 +46,7 @@
           @keydown.enter.prevent="startTitleEdit"
         >
           <span v-if="priorityLabel" class="sr-only">{{ priorityLabel }}: </span>
-          <template v-if="taskDraft">
-            <template v-for="(seg, i) in draftSegments(taskDraft)" :key="i">
-              <span v-if="seg.type === 'cursor'" class="remote-cursor" :style="`--cursor-color:${seg.color}`"></span>
-              <template v-else>{{ seg.value }}</template>
-            </template>
-          </template>
+          <template v-if="taskDraft"><template v-for="(seg, i) in draftSegments(taskDraft)" :key="i"><span v-if="seg.type === 'cursor'" class="remote-cursor" :style="`--cursor-color:${seg.color}`"></span><template v-else>{{ seg.value }}</template></template></template>
           <template v-else v-for="seg in contentSegments" :key="seg.i">
             <a v-if="seg.href" :href="seg.href" target="_blank" rel="noopener noreferrer" class="task-link" @click.stop>{{ seg.text }}</a>
             <template v-else>{{ seg.text }}</template>
