@@ -390,8 +390,6 @@
                 v-for="task in privateTasks"
                 :key="task.id"
                 :task="task"
-                :broadcast-draft="_broadcastDraft"
-                :task-draft="remoteDraft('task:' + task.id)"
               />
             </div>
             <div class="task-quick-add-wrap" :class="{ 'task-quick-add-wrap-sep': privateTasks.length }">
