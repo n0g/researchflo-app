@@ -10,10 +10,6 @@
             <i class="ph ph-palette" aria-hidden="true"></i>
             <span class="sidebar-label">Appearance</span>
           </button>
-          <button class="sidebar-nav-item" title="Kanban Stages" @click="scrollTo('settings-stages')">
-            <i class="ph ph-kanban" aria-hidden="true"></i>
-            <span class="sidebar-label">Kanban Stages</span>
-          </button>
           <button class="sidebar-nav-item" title="Collaborators" @click="scrollTo('settings-collaborators')">
             <i class="ph ph-users" aria-hidden="true"></i>
             <span class="sidebar-label">Collaborators</span>
@@ -120,57 +116,6 @@
                     @click="setTimeFormat('24h')"
                   >24-hour</button>
                 </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- ── Kanban Stages ── -->
-          <div id="settings-stages" class="settings-section">
-            <div class="settings-section-title">Kanban Stages</div>
-            <div class="settings-card">
-              <p class="settings-hint">Drag to reorder. Order determines column order on the board.</p>
-
-              <div ref="rowsEl" class="stage-rows">
-                <div
-                  v-for="(row, i) in stageRows"
-                  :key="row.key"
-                  class="stage-row"
-                  :data-index="i"
-                >
-                  <span class="handle" aria-hidden="true" title="drag to reorder">⠿</span>
-                  <div class="icon-picker-wrap" @click.stop>
-                    <button
-                      class="icon-picker-btn"
-                      :aria-label="'Stage icon: ' + (row.icon || 'kanban')"
-                      :title="'Choose icon'"
-                      @click="toggleIconPicker(row.key)"
-                    ><i :class="`ph ph-${row.icon || 'kanban'}`" aria-hidden="true"></i></button>
-                    <div v-if="openIconPickerKey === row.key" class="icon-picker-dropdown">
-                      <button
-                        v-for="icon in STAGE_ICONS"
-                        :key="icon"
-                        class="icon-option"
-                        :class="{ selected: row.icon === icon }"
-                        :aria-label="icon"
-                        :title="icon"
-                        @click="selectIcon(row, icon)"
-                      ><i :class="`ph ph-${icon}`" aria-hidden="true"></i></button>
-                    </div>
-                  </div>
-                  <input
-                    type="text"
-                    placeholder="Stage name"
-                    aria-label="Stage name"
-                    v-model="row.name"
-                    class="stage-name-input"
-                  >
-                  <button class="del" :aria-label="'Remove stage ' + row.name" @click="stageRows.splice(i, 1)"><i class="ph ph-x" aria-hidden="true"></i></button>
-                </div>
-              </div>
-
-              <div v-if="stageError" class="error-msg" role="alert">{{ stageError }}</div>
-              <div class="settings-actions">
-                <button class="btn sm" @click="addStageRow">+ Add stage</button>
               </div>
             </div>
           </div>
@@ -489,7 +434,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { f7 } from 'framework7-vue/bundle'
 import { useBoardStore } from '../stores/board.js'
 import { useAuthStore } from '../stores/auth.js'
@@ -500,8 +445,6 @@ import { useSidebar } from '../composables/useSidebar.js'
 import { useTheme } from '../composables/useTheme.js'
 import { useAccentColor } from '../composables/useAccentColor.js'
 import { useSchedulePrefs } from '../composables/useSchedulePrefs.js'
-import { DEFAULT_STAGES, getStageIcon } from '../lib/helpers.js'
-import { initSortable } from '../lib/sortable.js'
 import { registerPasskey, listPasskeys, deletePasskey, isPasskeySupported } from '../lib/passkey.js'
 import AppSidebar from '../components/AppSidebar.vue'
 import AppTabbar from '../components/AppTabbar.vue'
@@ -518,61 +461,6 @@ const { sidebarCollapsed, toggleSidebar } = useSidebar()
 const { setTheme, themePref } = useTheme()
 const { accentColor, setColor: setAccentColor } = useAccentColor()
 const { weekStartDay, timeFormat, setWeekStartDay, setTimeFormat } = useSchedulePrefs()
-
-// ── Stages ──
-const STAGE_ICONS = [
-  'compass', 'flask', 'pencil-line', 'eraser', 'paper-plane-tilt', 'snowflake',
-  'lightbulb', 'ghost', 'target', 'clock', 'hourglass', 'check-circle',
-  'flag', 'star', 'bookmark', 'archive', 'folder', 'kanban', 'potted-plant',
-]
-
-const rowsEl = ref(null)
-let keyCounter = 0
-const stageRows = ref((boardStore.stages || DEFAULT_STAGES).map(s => ({ ...s, icon: getStageIcon(s), key: keyCounter++ })))
-const stageError = ref('')
-const openIconPickerKey = ref(null)
-let _stageAutoSaveTimer = null
-let _stageSkipWatch = false
-
-function addStageRow() {
-  stageRows.value.push({ name: '', icon: 'kanban', key: keyCounter++ })
-}
-
-function toggleIconPicker(key) {
-  openIconPickerKey.value = openIconPickerKey.value === key ? null : key
-}
-
-function selectIcon(row, icon) {
-  row.icon = icon
-  openIconPickerKey.value = null
-}
-
-function closeIconPicker(e) {
-  if (!e.target.closest('.icon-picker-wrap')) openIconPickerKey.value = null
-}
-
-async function autoSaveStages() {
-  const stages = stageRows.value
-    .map(r => ({ id: r.id ?? null, name: r.name.trim(), icon: r.icon || 'kanban' }))
-    .filter(r => r.name)
-  if (!stages.length) return
-  stageError.value = ''
-  try {
-    await boardStore.saveStages(stages)
-    _stageSkipWatch = true
-    stageRows.value = (boardStore.stages || []).map(s => ({ ...s, icon: getStageIcon(s), key: keyCounter++ }))
-    await nextTick()
-    _stageSkipWatch = false
-  } catch {
-    stageError.value = 'Failed to save stages.'
-  }
-}
-
-watch(stageRows, () => {
-  if (_stageSkipWatch) return
-  clearTimeout(_stageAutoSaveTimer)
-  _stageAutoSaveTimer = setTimeout(autoSaveStages, 800)
-}, { deep: true })
 
 // ── Sites ──
 const newSiteUrl = ref('')
@@ -807,8 +695,6 @@ function onSettingsTabShow(tabEl) {
 }
 
 onMounted(async () => {
-  if (rowsEl.value) initSortable(rowsEl.value, stageRows)
-  document.addEventListener('click', closeIconPicker)
   f7.on('tabShow', onSettingsTabShow)
   loadPending()
   loadDisplayName()
