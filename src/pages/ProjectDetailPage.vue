@@ -365,7 +365,7 @@
               <TaskItem
                 :task="task"
                 :class="{ 'is-dragging': dragId === task.id }"
-                :broadcast-draft="(field, value) => { _channel.value?.send({ type: 'broadcast', event: 'draft', payload: { userId: authStore.user?.id, displayName: _myName(), field, value: value ?? null } }) }"
+                :broadcast-draft="_broadcastDraft"
                 :task-draft="remoteDraft('task:' + task.id)"
               />
             </template>
@@ -902,6 +902,11 @@ function trackField(field, value) {
   const name = _myName()
   _channel.value?.send({ type: 'broadcast', event: 'draft',
     payload: { userId: authStore.user?.id, displayName: name, field: field ?? null, value: value ?? null } })
+}
+
+function _broadcastDraft(field, value) {
+  _channel.value?.send({ type: 'broadcast', event: 'draft',
+    payload: { userId: authStore.user?.id, displayName: _myName(), field, value: value ?? null } })
 }
 function clearField() {
   const name = _myName()
