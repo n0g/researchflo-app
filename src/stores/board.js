@@ -122,7 +122,6 @@ export const useBoardStore = defineStore('board', () => {
   }
 
   async function saveStages(newStages) {
-    let { data: { user } } = await supabase.auth.getUser()
     const result = []
     for (let i = 0; i < newStages.length; i++) {
       const s = newStages[i]
@@ -131,7 +130,6 @@ export const useBoardStore = defineStore('board', () => {
         result.push({ id: s.id, name: s.name, icon: s.icon || 'kanban', sort_order: i })
       } else {
         const { data: inserted } = await supabase.from('stages').insert({
-          owner_id: user?.id,
           name: s.name,
           icon: s.icon || 'kanban',
           sort_order: i,
