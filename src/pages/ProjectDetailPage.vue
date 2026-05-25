@@ -363,7 +363,12 @@
           >
             <template v-for="(task, idx) in tasks" :key="task.id">
               <div v-if="dragId && dropIndex === idx" class="task-drop-indicator" aria-hidden="true" />
-              <TaskItem :task="task" :class="{ 'is-dragging': dragId === task.id }" />
+              <TaskItem
+                :task="task"
+                :class="{ 'is-dragging': dragId === task.id }"
+                :broadcast-draft="(field, value) => { _channel.value?.send({ type: 'broadcast', event: 'draft', payload: { userId: authStore.user?.id, displayName: _myName(), field, value: value ?? null } }) }"
+                :task-draft="remoteDraft('task:' + task.id)"
+              />
             </template>
             <div v-if="dragId && dropIndex === tasks.length" class="task-drop-indicator" aria-hidden="true" />
           </div>
@@ -580,7 +585,7 @@ async function saveVenue() {
   }
 }
 
-function cancelVenue() { editingVenue.value = false }
+function cancelVenue() { editingVenue.value = false; clearField() }
 
 // ── Title ──
 const editingTitle = ref(false)
@@ -604,7 +609,7 @@ async function saveTitle() {
   }
 }
 
-function cancelTitle() { editingTitle.value = false }
+function cancelTitle() { editingTitle.value = false; clearField() }
 
 // ── Status ──
 const statusText = computed(() => project.value?.status_text ?? '')
@@ -635,7 +640,7 @@ async function saveStatus() {
     await store.updateStatusText(projectId.value, val).catch(console.error)
   }
 }
-function cancelStatus() { editingStatus.value = false }
+function cancelStatus() { editingStatus.value = false; clearField() }
 
 // ── Summary (Todoist 📌 Summary section) ──
 const summaryText = computed(() => store.projectSummaryTask(projectId.value)?.content ?? '')
@@ -650,7 +655,7 @@ async function saveSummary() {
     await store.updateSummary(projectId.value, val).catch(console.error)
   }
 }
-function cancelSummary() { editingSummary.value = false }
+function cancelSummary() { editingSummary.value = false; clearField() }
 
 // ── Submission URL (Todoist 📌 Submission section) ──
 const submissionUrl = computed(() => {
@@ -683,7 +688,7 @@ async function saveSubmission() {
     await store.updateSubmissionUrl(projectId.value, val).catch(console.error)
   }
 }
-function cancelSubmission() { editingSubmission.value = false }
+function cancelSubmission() { editingSubmission.value = false; clearField() }
 
 // ── Submission status (HotCRP) ──
 const paperIdFromUrl = computed(() => submissionUrl.value ? extractPaperId(submissionUrl.value) : null)

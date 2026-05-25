@@ -104,7 +104,7 @@ import { dueStatus, formatDate, parseTaskContent } from '../lib/helpers.js'
 const props = defineProps({
   task: { type: Object, required: true },
   broadcastDraft: { type: Function, default: null },
-  getDraft: { type: Function, default: null },
+  taskDraft: { type: Object, default: null },
 })
 
 const store = useBoardStore()
@@ -203,8 +203,6 @@ function onItemClick() {
 
 // ── Link rendering ──
 const contentSegments = computed(() => parseTaskContent(props.task.content))
-
-const taskDraft = computed(() => props.getDraft?.(`task:${props.task.id}`) ?? null)
 
 // ── Priority ──
 const priorityClass = computed(() => {
