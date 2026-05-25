@@ -296,6 +296,7 @@ export const useBoardStore = defineStore('board', () => {
       .eq('is_completed', true)
       .order('completed_at', { ascending: false })
       .limit(50)
+    console.log('[fetchCompletedTasks]', { projectId, count: data?.length, error })
     if (error) throw new Error(error.message)
     const transformed = (data || []).map(_transformTask)
     completedTasksCache.value = { ...completedTasksCache.value, [projectId]: transformed }
