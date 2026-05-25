@@ -378,7 +378,7 @@
           </div>
 
           <!-- Private tasks section -->
-          <div v-if="privateTasks.length || showPrivate" class="task-section-header" @click="togglePrivate">
+          <div class="task-section-header" @click="togglePrivate">
             <span class="task-section-caret" :class="{ expanded: showPrivate }"><i class="ph ph-caret-right" aria-hidden="true"></i></span>
             <i class="ph ph-detective task-section-icon" aria-hidden="true"></i>
             <span class="task-section-label">Private</span>
