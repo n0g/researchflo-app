@@ -923,10 +923,10 @@ function _setupChannel() {
   ch.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'projects', filter: `id=eq.${pid}` },
     ({ new: n }) => store.applyRealtimeProject(n))
   ch.on('broadcast', { event: 'draft' }, ({ payload }) => {
-    const { userId, displayName, field, value } = payload
+    const { userId, displayName, field, value, cursor } = payload
     if (!userId || userId === authStore.user?.id) return
     const drafts = { ..._remoteDrafts.value }
-    if (field == null) { delete drafts[userId] } else { drafts[userId] = { field, value, displayName, color: _presenceColor(userId) } }
+    if (field == null) { delete drafts[userId] } else { drafts[userId] = { field, value, cursor, displayName, color: _presenceColor(userId) } }
     _remoteDrafts.value = drafts
   })
   ch.on('presence', { event: 'sync' }, () => {
