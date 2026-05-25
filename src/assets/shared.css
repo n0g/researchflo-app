@@ -661,7 +661,7 @@ html[data-theme="light"] .task-due-right.due-soon { color: #b45309; }
   background: var(--cursor-color, #6366f1);
   vertical-align: baseline;
   position: relative;
-  bottom: -0.1em;
+  bottom: -0.2em;
   margin: 0;
   animation: cursor-blink 1s ease-in-out infinite;
 }
