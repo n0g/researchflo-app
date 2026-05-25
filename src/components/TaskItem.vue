@@ -36,9 +36,19 @@
         @keydown.space.prevent="complete"
       ></div>
       <div class="task-content">
-        <div v-if="!editingTitle" class="task-name" :class="{ 'task-name-done': striking }" role="button" tabindex="0" @click.stop="startTitleEdit" @keydown.enter.prevent="startTitleEdit">
+        <div
+          v-if="!editingTitle"
+          class="task-name"
+          :class="{ 'task-name-done': striking, 'live-draft-text': taskDraft }"
+          :style="taskDraft ? `color: ${taskDraft.color}` : ''"
+          role="button"
+          tabindex="0"
+          @click.stop="startTitleEdit"
+          @keydown.enter.prevent="startTitleEdit"
+        >
           <span v-if="priorityLabel" class="sr-only">{{ priorityLabel }}: </span>
-          <template v-for="seg in contentSegments" :key="seg.i">
+          <template v-if="taskDraft">{{ taskDraft.value }}</template>
+          <template v-else v-for="seg in contentSegments" :key="seg.i">
             <a v-if="seg.href" :href="seg.href" target="_blank" rel="noopener noreferrer" class="task-link" @click.stop>{{ seg.text }}</a>
             <template v-else>{{ seg.text }}</template>
           </template>
@@ -49,9 +59,11 @@
           ref="titleInputEl"
           class="task-title-edit"
           :value="task.content"
+          @focus="broadcastDraft?.(`task:${task.id}`, task.content)"
+          @input="broadcastDraft?.(`task:${task.id}`, $event.target.value)"
           @blur="saveTitle"
           @keydown.enter.prevent="titleInputEl?.blur()"
-          @keydown.escape.stop="editingTitle = false"
+          @keydown.escape.stop="editingTitle = false; broadcastDraft?.(`task:${task.id}`, null)"
           @click.stop
         >
       </div>
@@ -91,6 +103,8 @@ import { dueStatus, formatDate, parseTaskContent } from '../lib/helpers.js'
 
 const props = defineProps({
   task: { type: Object, required: true },
+  broadcastDraft: { type: Function, default: null },
+  getDraft: { type: Function, default: null },
 })
 
 const store = useBoardStore()
@@ -189,6 +203,8 @@ function onItemClick() {
 
 // ── Link rendering ──
 const contentSegments = computed(() => parseTaskContent(props.task.content))
+
+const taskDraft = computed(() => props.getDraft?.(`task:${props.task.id}`) ?? null)
 
 // ── Priority ──
 const priorityClass = computed(() => {
