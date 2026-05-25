@@ -16,16 +16,18 @@
       :class="[priorityClass, { 'swipe-open': swipeOpen }]"
       :id="'task-' + task.id"
       :style="swipeStyle"
-      @pointerdown="onPointerDown"
-      @pointermove="onPointerMove"
-      @pointerup="onPointerUp"
-      @pointercancel="onPointerCancel"
-      @click="onItemClick"
+      @pointerdown="archived ? undefined : onPointerDown($event)"
+      @pointermove="archived ? undefined : onPointerMove($event)"
+      @pointerup="archived ? undefined : onPointerUp()"
+      @pointercancel="archived ? undefined : onPointerCancel()"
+      @click="archived ? undefined : onItemClick()"
     >
-      <div class="task-handle" aria-hidden="true">
+      <div v-if="!archived" class="task-handle" aria-hidden="true">
         <i class="ph ph-dots-six-vertical"></i>
       </div>
+      <div v-else class="task-handle task-handle-spacer-archived" aria-hidden="true"></div>
       <div
+        v-if="!archived"
         class="task-check"
         :class="{ done: completing, striking: striking }"
         role="button"
@@ -35,15 +37,23 @@
         @keydown.enter.prevent="complete"
         @keydown.space.prevent="complete"
       ></div>
+      <button
+        v-else
+        class="task-restore-btn"
+        aria-label="Restore task"
+        @click.stop="onRestore?.(task.id)"
+      >
+        <i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i>
+      </button>
       <div class="task-content">
         <div
           v-if="!editingTitle"
           class="task-name"
-          :class="{ 'task-name-done': striking, 'live-draft-bg': taskDraft }"
-          role="button"
-          tabindex="0"
-          @click.stop="startTitleEdit"
-          @keydown.enter.prevent="startTitleEdit"
+          :class="{ 'task-name-done': striking || archived, 'task-name-archived': archived, 'live-draft-bg': taskDraft && !archived }"
+          :role="archived ? undefined : 'button'"
+          :tabindex="archived ? undefined : '0'"
+          @click.stop="archived ? undefined : startTitleEdit()"
+          @keydown.enter.prevent="archived ? undefined : startTitleEdit()"
         >
           <span v-if="priorityLabel" class="sr-only">{{ priorityLabel }}: </span>
           <template v-if="taskDraft"><template v-for="(seg, i) in draftSegments(taskDraft)" :key="i"><span v-if="seg.type === 'cursor'" class="remote-cursor" :style="`--cursor-color:${seg.color}`"></span><template v-else>{{ seg.value }}</template></template></template>
@@ -81,7 +91,7 @@
         <i class="ph ph-flag" aria-hidden="true"></i>
         {{ formattedDue }}
       </div>
-      <div class="task-hover-actions">
+      <div v-if="!archived" class="task-hover-actions">
         <button v-if="!task.due" class="task-action-btn task-action-due" aria-label="Add due date" @click.stop="startDueEdit">
           <i class="ph ph-flag" aria-hidden="true"></i>
           <span class="task-action-label">Due</span>
@@ -105,6 +115,8 @@ const props = defineProps({
   task: { type: Object, required: true },
   broadcastDraft: { type: Function, default: null },
   taskDraft: { type: Object, default: null },
+  archived: { type: Boolean, default: false },
+  onRestore: { type: Function, default: null },
 })
 
 const store = useBoardStore()

@@ -377,6 +377,74 @@
             <div v-if="dragId && dropIndex === tasks.length" class="task-drop-indicator" aria-hidden="true" />
           </div>
 
+          <!-- Private tasks section -->
+          <div v-if="privateTasks.length || showPrivate" class="task-section-header" @click="togglePrivate">
+            <span class="task-section-caret" :class="{ expanded: showPrivate }"><i class="ph ph-caret-right" aria-hidden="true"></i></span>
+            <i class="ph ph-detective task-section-icon" aria-hidden="true"></i>
+            <span class="task-section-label">Private</span>
+            <span class="task-section-count">· {{ privateTasks.length }}</span>
+          </div>
+          <div v-if="showPrivate" class="task-section-body">
+            <div role="list" aria-label="Private tasks">
+              <TaskItem
+                v-for="task in privateTasks"
+                :key="task.id"
+                :task="task"
+                :broadcast-draft="_broadcastDraft"
+                :task-draft="remoteDraft('task:' + task.id)"
+              />
+            </div>
+            <div class="task-quick-add-wrap" :class="{ 'task-quick-add-wrap-sep': privateTasks.length }">
+              <div
+                v-if="!addingPrivateTask"
+                class="task-quick-add-row"
+                role="button"
+                tabindex="0"
+                @click="startAddPrivateTask"
+                @keydown.enter.prevent="startAddPrivateTask"
+                @keydown.space.prevent="startAddPrivateTask"
+              >
+                <div class="task-handle-spacer" aria-hidden="true"></div>
+                <div class="task-quick-add-btn" aria-hidden="true"><i class="ph ph-plus"></i></div>
+                <span class="task-quick-add-label">Add private task</span>
+              </div>
+              <div v-else class="task-quick-add-row task-quick-add-editing">
+                <div class="task-handle-spacer" aria-hidden="true"></div>
+                <div class="task-quick-add-btn" aria-hidden="true"><i class="ph ph-plus"></i></div>
+                <input
+                  ref="privateQuickAddInputEl"
+                  v-model="privateTaskContent"
+                  class="quick-add-input"
+                  type="text"
+                  placeholder="Private task name"
+                  @keydown.enter.prevent="submitAddPrivateTask"
+                  @keydown.escape.stop="cancelAddPrivateTask"
+                  @blur="onPrivateQuickAddBlur"
+                >
+              </div>
+            </div>
+          </div>
+
+          <!-- Completed tasks section -->
+          <div class="task-section-header task-section-archive" @click="toggleArchive">
+            <span class="task-section-caret" :class="{ expanded: showArchive }"><i class="ph ph-caret-right" aria-hidden="true"></i></span>
+            <i class="ph ph-archive-box task-section-icon" aria-hidden="true"></i>
+            <span class="task-section-label">Completed</span>
+            <span v-if="!loadingArchive" class="task-section-count">· {{ completedTasks.length }}</span>
+            <i v-else class="ph ph-arrow-clockwise spin-icon task-section-loading" aria-hidden="true"></i>
+          </div>
+          <div v-if="showArchive" class="task-section-body">
+            <div role="list" aria-label="Completed tasks">
+              <TaskItem
+                v-for="task in completedTasks"
+                :key="task.id"
+                :task="task"
+                :archived="true"
+                :on-restore="restoreTask"
+              />
+            </div>
+          </div>
+
           <!-- Quick-add -->
           <div class="task-quick-add-wrap" :class="{ 'task-quick-add-wrap-sep': tasks.length }">
             <div
@@ -457,6 +525,62 @@ function _getMonday(d) {
 const stageInfo = computed(() => store.projectStage(projectId.value))
 const meta = computed(() => store.projectMeta(projectId.value))
 const tasks = computed(() => store.projectTasks(projectId.value))
+const privateTasks = computed(() => store.privateProjectTasks(projectId.value))
+const completedTasks = computed(() => store.completedProjectTasks(projectId.value))
+
+const showPrivate = ref(false)
+const showArchive = ref(false)
+const loadingArchive = ref(false)
+const addingPrivateTask = ref(false)
+const privateTaskContent = ref('')
+const privateQuickAddInputEl = ref(null)
+
+async function togglePrivate() {
+  showPrivate.value = !showPrivate.value
+  if (showPrivate.value) {
+    await nextTick()
+    // focus first task or input if expanding
+  }
+}
+
+async function toggleArchive() {
+  showArchive.value = !showArchive.value
+  if (showArchive.value && completedTasks.value.length === 0) {
+    loadingArchive.value = true
+    await store.fetchCompletedTasks(projectId.value).catch(console.error)
+    loadingArchive.value = false
+  }
+}
+
+function startAddPrivateTask() {
+  addingPrivateTask.value = true
+  nextTick(() => privateQuickAddInputEl.value?.focus())
+}
+
+async function submitAddPrivateTask() {
+  const content = privateTaskContent.value.trim()
+  if (!content) { cancelAddPrivateTask(); return }
+  if (!project.value) return
+  privateTaskContent.value = ''
+  await store.quickAddTask(content, project.value.id, true).catch(console.error)
+  nextTick(() => privateQuickAddInputEl.value?.focus())
+}
+
+function cancelAddPrivateTask() {
+  addingPrivateTask.value = false
+  privateTaskContent.value = ''
+}
+
+function onPrivateQuickAddBlur() {
+  const content = privateTaskContent.value.trim()
+  if (content && project.value) store.quickAddTask(content, project.value.id, true).catch(console.error)
+  privateTaskContent.value = ''
+  addingPrivateTask.value = false
+}
+
+async function restoreTask(taskId) {
+  await store.uncompleteTask(taskId, projectId.value).catch(console.error)
+}
 
 // ── Drag to reorder ──
 const taskListEl = ref(null)

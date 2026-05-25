@@ -30,6 +30,8 @@ export const useBoardStore = defineStore('board', () => {
   const _taskSchedule = ref(new Map())
   // Current user's people.id — used for self-filter in collaborator lists
   const myPeopleId = ref(null)
+  // Cache of completed tasks per project, fetched on demand: projectId → task[]
+  const completedTasksCache = ref({})
 
   // ── Computed ───────────────────────────────────────────────────────────────
   const stageLabels = computed(() => (stages.value || []).map(s => s.id).filter(Boolean))
@@ -272,8 +274,31 @@ export const useBoardStore = defineStore('board', () => {
 
   function projectTasks(projectId) {
     return tasks.value
-      .filter(t => t.project_id === projectId && !t.is_completed)
+      .filter(t => t.project_id === projectId && !t.is_completed && !t.is_private)
       .sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
+  }
+
+  function privateProjectTasks(projectId) {
+    return tasks.value
+      .filter(t => t.project_id === projectId && !t.is_completed && t.is_private)
+      .sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
+  }
+
+  function completedProjectTasks(projectId) {
+    return completedTasksCache.value[projectId] || []
+  }
+
+  async function fetchCompletedTasks(projectId) {
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('project_id', projectId)
+      .eq('is_completed', true)
+      .order('completed_at', { ascending: false })
+      .limit(50)
+    if (error) throw new Error(error.message)
+    const transformed = (data || []).map(_transformTask)
+    completedTasksCache.value = { ...completedTasksCache.value, [projectId]: transformed }
   }
 
   function projectDeadline(projectId) {
@@ -529,6 +554,24 @@ export const useBoardStore = defineStore('board', () => {
     tasks.value = tasks.value.filter(t => t.id !== taskId)
   }
 
+  async function uncompleteTask(taskId, projectId) {
+    const { data, error } = await supabase.from('tasks')
+      .update({ is_completed: false, completed_at: null })
+      .eq('id', taskId)
+      .select().single()
+    if (error) throw new Error(error.message)
+    // Remove from completed cache
+    const cache = completedTasksCache.value[projectId]
+    if (cache) {
+      completedTasksCache.value = {
+        ...completedTasksCache.value,
+        [projectId]: cache.filter(t => t.id !== taskId),
+      }
+    }
+    // Add back to active tasks
+    tasks.value.push(_transformTask(data))
+  }
+
   async function deleteTask(taskId) {
     const task = tasks.value.find(t => t.id === taskId)
     if (task?.caldav_event_uid) {
@@ -551,10 +594,10 @@ export const useBoardStore = defineStore('board', () => {
     )
   }
 
-  async function quickAddTask(content, projectId) {
+  async function quickAddTask(content, projectId, isPrivate = false) {
     const { data: { user } } = await supabase.auth.getUser()
     const { data: task, error } = await supabase.from('tasks')
-      .insert({ content, project_id: projectId, created_by: user.id })
+      .insert({ content, project_id: projectId, created_by: user.id, is_private: isPrivate || false })
       .select().single()
     if (error) throw new Error(error.message)
     tasks.value.push(_transformTask(task))
@@ -676,8 +719,9 @@ export const useBoardStore = defineStore('board', () => {
     activeFilter, stageLabels, displayProjects, inboxProjectId,
     excludedSectionIds, deadlineSectionIds, allCollaborators, allVenues, allPeople, setupStatus, myPeopleId,
     initStages, saveToken, saveStages, resetToken, loadData, loadIfStale,
-    projectStage, projectStatusTask, projectMeta, projectTasks, projectDeadline,
-    moveStage, completeTask, deleteTask, reorderTasks, quickAddTask, updateTaskContent, updateTaskDue,
+    projectStage, projectStatusTask, projectMeta, projectTasks, privateProjectTasks,
+    completedProjectTasks, fetchCompletedTasks, projectDeadline,
+    moveStage, completeTask, uncompleteTask, deleteTask, reorderTasks, quickAddTask, updateTaskContent, updateTaskDue,
     saveGCalEvent, saveScheduledTime, clearScheduledTime, updateStatusText,
     updateVenue, setDeadlineDate, addCollaborator, removeCollaborator, renameProject,
     projectDeadlineTaskBase, projectDeadlineTaskObj,
