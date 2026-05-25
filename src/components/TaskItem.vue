@@ -318,6 +318,7 @@ function startTitleEdit() {
 async function saveTitle() {
   const val = titleInputEl.value?.value?.trim()
   editingTitle.value = false
+  props.broadcastDraft?.(`task:${props.task.id}`, null)
   if (val && val !== props.task.content) {
     await store.updateTaskContent(props.task.id, val).catch(console.error)
   }

@@ -919,7 +919,19 @@ function _setupChannel() {
     config: { broadcast: { self: false }, presence: { key: authStore.user.id } }
   })
   ch.on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: `project_id=eq.${pid}` },
-    ({ eventType, new: n, old: o }) => store.applyRealtimeTask(eventType, n, o))
+    ({ eventType, new: n, old: o }) => {
+      store.applyRealtimeTask(eventType, n, o)
+      const taskId = eventType === 'DELETE' ? o?.id : n?.id
+      if (taskId) {
+        const taskField = `task:${taskId}`
+        const drafts = { ..._remoteDrafts.value }
+        let changed = false
+        for (const [uid, d] of Object.entries(drafts)) {
+          if (d.field === taskField) { delete drafts[uid]; changed = true }
+        }
+        if (changed) _remoteDrafts.value = drafts
+      }
+    })
   ch.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'projects', filter: `id=eq.${pid}` },
     ({ new: n }) => store.applyRealtimeProject(n))
   ch.on('broadcast', { event: 'draft' }, ({ payload }) => {
