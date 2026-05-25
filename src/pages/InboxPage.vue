@@ -59,6 +59,26 @@
               >
             </div>
           </div>
+
+          <!-- Completed tasks section -->
+          <div class="task-section-header task-section-private" @click="toggleArchive">
+            <span class="task-section-caret" :class="{ expanded: showArchive }"><i class="ph ph-caret-right" aria-hidden="true"></i></span>
+            <i class="ph ph-archive task-section-icon" aria-hidden="true"></i>
+            <span class="task-section-label">Completed</span>
+            <span v-if="!loadingArchive" class="task-section-count">· {{ completedTasks.length }}</span>
+            <i v-else class="ph ph-arrow-clockwise spin-icon task-section-loading" aria-hidden="true"></i>
+          </div>
+          <div v-if="showArchive" class="task-section-body">
+            <div role="list" aria-label="Completed inbox tasks">
+              <TaskItem
+                v-for="task in completedTasks"
+                :key="task.id"
+                :task="task"
+                :archived="true"
+                :on-restore="restoreTask"
+              />
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -137,6 +157,23 @@ const inboxTasks = computed(() =>
     .filter(t => t.project_id == null && !t.is_completed)
     .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
 )
+
+const showArchive = ref(false)
+const loadingArchive = ref(false)
+const completedTasks = computed(() => store.completedInboxTasks())
+
+async function toggleArchive() {
+  showArchive.value = !showArchive.value
+  if (showArchive.value && completedTasks.value.length === 0) {
+    loadingArchive.value = true
+    await store.fetchCompletedTasks(null).catch(console.error)
+    loadingArchive.value = false
+  }
+}
+
+async function restoreTask(taskId) {
+  await store.uncompleteTask(taskId, null).catch(console.error)
+}
 
 function startAdd() {
   addingTask.value = true

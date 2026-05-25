@@ -413,19 +413,22 @@
           </div>
 
           <!-- Private tasks section -->
-          <div class="task-section-header" @click="togglePrivate">
+          <div class="task-section-header task-section-private" @click="togglePrivate">
             <span class="task-section-caret" :class="{ expanded: showPrivate }"><i class="ph ph-caret-right" aria-hidden="true"></i></span>
             <i class="ph ph-detective task-section-icon" aria-hidden="true"></i>
             <span class="task-section-label">Private</span>
             <span class="task-section-count">· {{ privateTasks.length }}</span>
           </div>
           <div v-if="showPrivate" class="task-section-body">
-            <div role="list" aria-label="Private tasks">
-              <TaskItem
-                v-for="task in privateTasks"
-                :key="task.id"
-                :task="task"
-              />
+            <div ref="privateTaskListEl" role="list" aria-label="Private tasks" @pointerdown="onPrivateDragStart">
+              <template v-for="(task, idx) in privateTasks" :key="task.id">
+                <div v-if="privateDragId && privateDropIndex === idx" class="task-drop-indicator" aria-hidden="true" />
+                <TaskItem
+                  :task="task"
+                  :class="{ 'is-dragging': privateDragId === task.id }"
+                />
+              </template>
+              <div v-if="privateDragId && privateDropIndex === privateTasks.length" class="task-drop-indicator" aria-hidden="true" />
             </div>
             <div class="task-quick-add-wrap" :class="{ 'task-quick-add-wrap-sep': privateTasks.length }">
               <div
@@ -580,55 +583,63 @@ async function restoreTask(taskId) {
   await store.uncompleteTask(taskId, projectId.value).catch(console.error)
 }
 
-// ── Drag to reorder ──
+// ── Drag to reorder (shared logic) ──
+function _makeDragHandlers(listEl, getItems) {
+  const dragId = ref(null)
+  const dropIndex = ref(-1)
+
+  function onDragStart(e) {
+    if (!e.target.closest('.task-handle')) return
+    const wrap = e.target.closest('.task-item-wrap')
+    if (!wrap) return
+    const taskEl = wrap.querySelector('[id^="task-"]')
+    if (!taskEl) return
+    e.preventDefault()
+    const id = taskEl.id.replace('task-', '')
+    dragId.value = id
+    dropIndex.value = getItems().findIndex(t => t.id === id)
+    document.body.style.userSelect = 'none'
+    document.addEventListener('pointermove', onDragMove, { passive: true })
+    document.addEventListener('pointerup', onDragEnd, { once: true })
+    document.addEventListener('pointercancel', onDragEnd, { once: true })
+  }
+
+  function onDragMove(e) {
+    if (!dragId.value || !listEl.value) return
+    const wraps = [...listEl.value.querySelectorAll('.task-item-wrap')]
+    let newIndex = wraps.length
+    for (let i = 0; i < wraps.length; i++) {
+      const rect = wraps[i].getBoundingClientRect()
+      if (e.clientY < rect.top + rect.height / 2) { newIndex = i; break }
+    }
+    dropIndex.value = newIndex
+  }
+
+  async function onDragEnd() {
+    document.removeEventListener('pointermove', onDragMove)
+    document.body.style.userSelect = ''
+    if (!dragId.value) return
+    const items = getItems()
+    const fromIdx = items.findIndex(t => t.id === dragId.value)
+    let toIdx = dropIndex.value > fromIdx ? dropIndex.value - 1 : dropIndex.value
+    toIdx = Math.max(0, Math.min(items.length - 1, toIdx))
+    if (fromIdx !== toIdx) {
+      const ordered = [...items]
+      const [moved] = ordered.splice(fromIdx, 1)
+      ordered.splice(toIdx, 0, moved)
+      await store.reorderTasks(ordered.map(t => t.id)).catch(console.error)
+    }
+    dragId.value = null
+    dropIndex.value = -1
+  }
+
+  return { dragId, dropIndex, onDragStart, onDragMove, onDragEnd }
+}
+
 const taskListEl = ref(null)
-const dragId = ref(null)
-const dropIndex = ref(-1)
-
-function onDragStart(e) {
-  if (!e.target.closest('.task-handle')) return
-  const wrap = e.target.closest('.task-item-wrap')
-  if (!wrap) return
-  const taskEl = wrap.querySelector('[id^="task-"]')
-  if (!taskEl) return
-  e.preventDefault()
-  const id = taskEl.id.replace('task-', '')
-  dragId.value = id
-  dropIndex.value = tasks.value.findIndex(t => t.id === id)
-  document.body.style.userSelect = 'none'
-
-  document.addEventListener('pointermove', onDragMove, { passive: true })
-  document.addEventListener('pointerup', onDragEnd, { once: true })
-  document.addEventListener('pointercancel', onDragEnd, { once: true })
-}
-
-function onDragMove(e) {
-  if (!dragId.value || !taskListEl.value) return
-  const wraps = [...taskListEl.value.querySelectorAll('.task-item-wrap')]
-  let newIndex = wraps.length
-  for (let i = 0; i < wraps.length; i++) {
-    const rect = wraps[i].getBoundingClientRect()
-    if (e.clientY < rect.top + rect.height / 2) { newIndex = i; break }
-  }
-  dropIndex.value = newIndex
-}
-
-async function onDragEnd() {
-  document.removeEventListener('pointermove', onDragMove)
-  document.body.style.userSelect = ''
-  if (!dragId.value) return
-  const fromIdx = tasks.value.findIndex(t => t.id === dragId.value)
-  let toIdx = dropIndex.value > fromIdx ? dropIndex.value - 1 : dropIndex.value
-  toIdx = Math.max(0, Math.min(tasks.value.length - 1, toIdx))
-  if (fromIdx !== toIdx) {
-    const ordered = [...tasks.value]
-    const [moved] = ordered.splice(fromIdx, 1)
-    ordered.splice(toIdx, 0, moved)
-    await store.reorderTasks(ordered.map(t => t.id)).catch(console.error)
-  }
-  dragId.value = null
-  dropIndex.value = -1
-}
+const privateTaskListEl = ref(null)
+const { dragId, dropIndex, onDragStart, onDragEnd } = _makeDragHandlers(taskListEl, () => tasks.value)
+const { dragId: privateDragId, dropIndex: privateDropIndex, onDragStart: onPrivateDragStart } = _makeDragHandlers(privateTaskListEl, () => privateTasks.value)
 const deadlineTask = computed(() => store.projectDeadlineTaskBase(projectId.value))
 const deadline = computed(() => store.projectDeadline(projectId.value))
 

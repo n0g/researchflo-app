@@ -289,16 +289,17 @@ export const useBoardStore = defineStore('board', () => {
   }
 
   async function fetchCompletedTasks(projectId) {
-    const { data, error } = await supabase
-      .from('tasks')
-      .select('*')
-      .eq('project_id', projectId)
-      .eq('is_completed', true)
-      .order('completed_at', { ascending: false })
-      .limit(50)
+    let query = supabase.from('tasks').select('*').eq('is_completed', true).order('completed_at', { ascending: false }).limit(50)
+    query = projectId === null ? query.is('project_id', null) : query.eq('project_id', projectId)
+    const { data, error } = await query
     if (error) throw new Error(error.message)
     const transformed = (data || []).map(t => _transformTask(t))
-    completedTasksCache.value = { ...completedTasksCache.value, [projectId]: transformed }
+    const cacheKey = projectId ?? '__inbox__'
+    completedTasksCache.value = { ...completedTasksCache.value, [cacheKey]: transformed }
+  }
+
+  function completedInboxTasks() {
+    return completedTasksCache.value['__inbox__'] || []
   }
 
   function projectDeadline(projectId) {
@@ -561,11 +562,12 @@ export const useBoardStore = defineStore('board', () => {
       .select().single()
     if (error) throw new Error(error.message)
     // Remove from completed cache
-    const cache = completedTasksCache.value[projectId]
+    const cacheKey = projectId ?? '__inbox__'
+    const cache = completedTasksCache.value[cacheKey]
     if (cache) {
       completedTasksCache.value = {
         ...completedTasksCache.value,
-        [projectId]: cache.filter(t => t.id !== taskId),
+        [cacheKey]: cache.filter(t => t.id !== taskId),
       }
     }
     // Add back to active tasks
@@ -722,6 +724,7 @@ export const useBoardStore = defineStore('board', () => {
     projectStage, projectStatusTask, projectMeta, projectTasks, privateProjectTasks,
     completedProjectTasks, fetchCompletedTasks, projectDeadline,
     moveStage, completeTask, uncompleteTask, deleteTask, reorderTasks, quickAddTask, updateTaskContent, updateTaskDue,
+    completedInboxTasks,
     saveGCalEvent, saveScheduledTime, clearScheduledTime, updateStatusText,
     updateVenue, setDeadlineDate, addCollaborator, removeCollaborator, renameProject,
     projectDeadlineTaskBase, projectDeadlineTaskObj,
