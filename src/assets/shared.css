@@ -656,10 +656,12 @@ html[data-theme="light"] .task-due-right.due-soon { color: #b45309; }
 .remote-cursor {
   display: inline-block;
   width: 2px;
-  height: 1em;
+  height: 1.2em;
   border-radius: 1px;
   background: var(--cursor-color, #6366f1);
   vertical-align: baseline;
+  position: relative;
+  bottom: -0.1em;
   margin: 0;
   animation: cursor-blink 1s ease-in-out infinite;
 }
