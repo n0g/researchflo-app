@@ -122,6 +122,12 @@ html[data-theme="dark"] {
 /* ── BASE RESETS ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* Ensure F7 root containers don't bleed white into the bottom safe area */
+#app, .framework7-root, .views, .views-tabs {
+  background: var(--bg);
+  min-height: 100%;
+}
+
 html, body {
   height: 100%;
   background: var(--bg);
