@@ -41,6 +41,8 @@
               aria-label="Project title"
               @focus="trackField('title', titleDraft)"
               @input="trackField('title', $event.target.value, $event.target.selectionStart)"
+              @keyup="trackCursor('title', $event)"
+              @click="trackCursor('title', $event)"
               @blur="saveTitle(); clearField()"
               @keydown.meta.enter.prevent="titleInputEl?.blur()"
               @keydown.escape.prevent="cancelTitle"
@@ -120,6 +122,8 @@
               aria-label="Status"
               @focus="trackField('status', statusDraft)"
               @input="trackField('status', $event.target.value, $event.target.selectionStart)"
+              @keyup="trackCursor('status', $event)"
+              @click="trackCursor('status', $event)"
               @blur="saveStatus(); clearField()"
               @keydown.escape.prevent="cancelStatus"
               @keydown.meta.enter.prevent="statusTextareaEl?.blur()"
@@ -183,6 +187,8 @@
                 aria-label="Venue"
                 @focus="trackField('venue', venueDraft)"
                 @input="trackField('venue', $event.target.value, $event.target.selectionStart)"
+                @keyup="trackCursor('venue', $event)"
+                @click="trackCursor('venue', $event)"
                 @blur="saveVenue(); clearField()"
                 @keydown.enter.prevent="venueInputEl?.blur()"
                 @keydown.escape.prevent="cancelVenue"
@@ -263,6 +269,8 @@
                 aria-label="Submission URL"
                 @focus="trackField('submission', submissionDraft)"
                 @input="trackField('submission', $event.target.value, $event.target.selectionStart)"
+                @keyup="trackCursor('submission', $event)"
+                @click="trackCursor('submission', $event)"
                 @blur="saveSubmission(); clearField()"
                 @keydown.enter.prevent="submissionInputEl?.blur()"
                 @keydown.escape.prevent="cancelSubmission"
@@ -320,6 +328,8 @@
               aria-label="Summary"
               @focus="trackField('summary', summaryDraft)"
               @input="trackField('summary', $event.target.value, $event.target.selectionStart)"
+              @keyup="trackCursor('summary', $event)"
+              @click="trackCursor('summary', $event)"
               @blur="saveSummary(); clearField()"
               @keydown.escape.prevent="cancelSummary"
               @keydown.meta.enter.prevent="summaryTextareaEl?.blur()"
@@ -891,6 +901,10 @@ function remoteDraft(field) {
 
 function _myName() {
   return store.allPeople.find(p => p.id === store.myPeopleId)?.display_name || authStore.user?.email?.split('@')[0] || '?'
+}
+
+function trackCursor(field, e) {
+  trackField(field, e.target.value, e.target.selectionStart)
 }
 
 function trackField(field, value, cursor) {

@@ -65,10 +65,11 @@
           :value="task.content"
           @focus="broadcastDraft?.(`task:${task.id}`, task.content)"
           @input="broadcastDraft?.(`task:${task.id}`, $event.target.value, $event.target.selectionStart)"
+          @keyup="broadcastDraft?.(`task:${task.id}`, $event.target.value, $event.target.selectionStart)"
+          @click.stop="broadcastDraft?.(`task:${task.id}`, $event.target.value, $event.target.selectionStart)"
           @blur="saveTitle"
           @keydown.enter.prevent="titleInputEl?.blur()"
           @keydown.escape.stop="editingTitle = false; broadcastDraft?.(`task:${task.id}`, null)"
-          @click.stop
         >
       </div>
       <div
