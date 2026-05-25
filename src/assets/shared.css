@@ -1,5 +1,19 @@
 /* Shared UI components */
 
+/* ── STATUS BAR SHADOW (light mode only) ── */
+/* black-translucent status bar uses white icons — darken the top edge so they're readable */
+html[data-theme="light"] body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: calc(env(safe-area-inset-top, 44px) + 12px);
+  background: linear-gradient(to bottom, rgba(0,0,0,0.28) 0%, transparent 100%);
+  z-index: 99999;
+  pointer-events: none;
+}
+
 /* ── FILTER FAB ── */
 .filter-fab {
   position: absolute;
