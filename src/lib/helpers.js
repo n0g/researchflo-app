@@ -115,3 +115,15 @@ export function formatDate(dateStr) {
   if (!dateStr) return ''
   return parseLocalDate(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
+
+export function draftSegments(draft) {
+  if (!draft) return []
+  const text = draft.value ?? ''
+  const pos = draft.cursor != null ? Math.min(draft.cursor, text.length) : null
+  if (pos === null) return [{ type: 'text', value: text }]
+  return [
+    { type: 'text', value: text.slice(0, pos) },
+    { type: 'cursor', color: draft.color },
+    { type: 'text', value: text.slice(pos) },
+  ]
+}

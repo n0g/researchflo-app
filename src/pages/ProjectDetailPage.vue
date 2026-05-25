@@ -24,15 +24,14 @@
             <h1
               v-if="!editingTitle"
               class="project-title project-title-editable"
-              :class="{ 'live-draft-text': remoteDraft('title') }"
-              :style="remoteDraft('title') ? `color: ${remoteDraft('title').color}` : ''"
+              :class="{ 'live-draft-bg': remoteDraft('title') }"
               role="button"
               tabindex="0"
               aria-label="Edit project title"
               @click="startEditTitle"
               @keydown.enter.prevent="startEditTitle"
               @keydown.space.prevent="startEditTitle"
-            >{{ remoteDraft('title')?.value ?? project?.name ?? 'Loading…' }}</h1>
+            ><template v-if="remoteDraft('title')"><template v-for="(seg, i) in draftSegments(remoteDraft('title'))" :key="i"><span v-if="seg.type === 'cursor'" class="remote-cursor" :style="`--cursor-color:${seg.color}`"></span><template v-else>{{ seg.value }}</template></template></template><template v-else>{{ project?.name ?? 'Loading…' }}</template></h1>
             <textarea
               v-else
               ref="titleInputEl"
@@ -41,7 +40,7 @@
               rows="2"
               aria-label="Project title"
               @focus="trackField('title', titleDraft)"
-              @input="trackField('title', $event.target.value)"
+              @input="trackField('title', $event.target.value, $event.target.selectionStart)"
               @blur="saveTitle(); clearField()"
               @keydown.meta.enter.prevent="titleInputEl?.blur()"
               @keydown.escape.prevent="cancelTitle"
@@ -104,15 +103,14 @@
             <div
               v-if="!editingStatus"
               class="meta-editable"
-              :class="{ placeholder: !statusText && !remoteDraft('status'), 'live-draft-text': remoteDraft('status') }"
-              :style="remoteDraft('status') ? `color: ${remoteDraft('status').color}` : ''"
+              :class="{ placeholder: !statusText && !remoteDraft('status'), 'live-draft-bg': remoteDraft('status') }"
               role="button"
               tabindex="0"
               aria-label="Edit status"
               @click="startEdit('status')"
               @keydown.enter.prevent="startEdit('status')"
               @keydown.space.prevent="startEdit('status')"
-            >{{ (remoteDraft('status')?.value ?? statusText) || 'Add a status…' }}</div>
+            ><template v-if="remoteDraft('status')"><template v-for="(seg, i) in draftSegments(remoteDraft('status'))" :key="i"><span v-if="seg.type === 'cursor'" class="remote-cursor" :style="`--cursor-color:${seg.color}`"></span><template v-else>{{ seg.value }}</template></template></template><template v-else>{{ statusText || 'Add a status…' }}</template></div>
             <textarea
               v-else
               ref="statusTextareaEl"
@@ -121,7 +119,7 @@
               rows="3"
               aria-label="Status"
               @focus="trackField('status', statusDraft)"
-              @input="trackField('status', $event.target.value)"
+              @input="trackField('status', $event.target.value, $event.target.selectionStart)"
               @blur="saveStatus(); clearField()"
               @keydown.escape.prevent="cancelStatus"
               @keydown.meta.enter.prevent="statusTextareaEl?.blur()"
@@ -167,15 +165,14 @@
               <div
                 v-if="!editingVenue"
                 class="meta-editable"
-                :class="{ placeholder: !venueText && !remoteDraft('venue'), 'live-draft-text': remoteDraft('venue') }"
-                :style="remoteDraft('venue') ? `color: ${remoteDraft('venue').color}` : ''"
+                :class="{ placeholder: !venueText && !remoteDraft('venue'), 'live-draft-bg': remoteDraft('venue') }"
                 role="button"
                 tabindex="0"
                 aria-label="Edit venue"
                 @click="startEditVenue"
                 @keydown.enter.prevent="startEditVenue"
                 @keydown.space.prevent="startEditVenue"
-              >{{ (remoteDraft('venue')?.value ?? venueText) || 'Add venue…' }}</div>
+              ><template v-if="remoteDraft('venue')"><template v-for="(seg, i) in draftSegments(remoteDraft('venue'))" :key="i"><span v-if="seg.type === 'cursor'" class="remote-cursor" :style="`--cursor-color:${seg.color}`"></span><template v-else>{{ seg.value }}</template></template></template><template v-else>{{ venueText || 'Add venue…' }}</template></div>
               <input
                 v-else
                 ref="venueInputEl"
@@ -185,7 +182,7 @@
                 placeholder="e.g. PETS 2026"
                 aria-label="Venue"
                 @focus="trackField('venue', venueDraft)"
-                @input="trackField('venue', $event.target.value)"
+                @input="trackField('venue', $event.target.value, $event.target.selectionStart)"
                 @blur="saveVenue(); clearField()"
                 @keydown.enter.prevent="venueInputEl?.blur()"
                 @keydown.escape.prevent="cancelVenue"
@@ -248,15 +245,14 @@
               <div
                 v-if="!editingSubmission"
                 class="meta-editable submission-url-text"
-                :class="{ placeholder: !submissionUrl && !remoteDraft('submission'), 'live-draft-text': remoteDraft('submission') }"
-                :style="remoteDraft('submission') ? `color: ${remoteDraft('submission').color}` : ''"
+                :class="{ placeholder: !submissionUrl && !remoteDraft('submission'), 'live-draft-bg': remoteDraft('submission') }"
                 role="button"
                 tabindex="0"
                 aria-label="Edit submission URL"
                 @click="startEditSubmission"
                 @keydown.enter.prevent="startEditSubmission"
                 @keydown.space.prevent="startEditSubmission"
-              >{{ (remoteDraft('submission')?.value ?? submissionUrlDisplay) || 'Add submission URL…' }}</div>
+              ><template v-if="remoteDraft('submission')"><template v-for="(seg, i) in draftSegments(remoteDraft('submission'))" :key="i"><span v-if="seg.type === 'cursor'" class="remote-cursor" :style="`--cursor-color:${seg.color}`"></span><template v-else>{{ seg.value }}</template></template></template><template v-else>{{ submissionUrlDisplay || 'Add submission URL…' }}</template></div>
               <input
                 v-else
                 ref="submissionInputEl"
@@ -266,7 +262,7 @@
                 placeholder="https://…"
                 aria-label="Submission URL"
                 @focus="trackField('submission', submissionDraft)"
-                @input="trackField('submission', $event.target.value)"
+                @input="trackField('submission', $event.target.value, $event.target.selectionStart)"
                 @blur="saveSubmission(); clearField()"
                 @keydown.enter.prevent="submissionInputEl?.blur()"
                 @keydown.escape.prevent="cancelSubmission"
@@ -307,15 +303,14 @@
             <div
               v-if="!editingSummary"
               class="meta-editable"
-              :class="{ placeholder: !summaryText && !remoteDraft('summary'), 'live-draft-text': remoteDraft('summary') }"
-              :style="remoteDraft('summary') ? `color: ${remoteDraft('summary').color}` : ''"
+              :class="{ placeholder: !summaryText && !remoteDraft('summary'), 'live-draft-bg': remoteDraft('summary') }"
               role="button"
               tabindex="0"
               aria-label="Edit summary"
               @click="startEdit('summary')"
               @keydown.enter.prevent="startEdit('summary')"
               @keydown.space.prevent="startEdit('summary')"
-            >{{ (remoteDraft('summary')?.value ?? summaryText) || 'Add a summary…' }}</div>
+            ><template v-if="remoteDraft('summary')"><template v-for="(seg, i) in draftSegments(remoteDraft('summary'))" :key="i"><span v-if="seg.type === 'cursor'" class="remote-cursor" :style="`--cursor-color:${seg.color}`"></span><template v-else>{{ seg.value }}</template></template></template><template v-else>{{ summaryText || 'Add a summary…' }}</template></div>
             <textarea
               v-else
               ref="summaryTextareaEl"
@@ -324,7 +319,7 @@
               rows="4"
               aria-label="Summary"
               @focus="trackField('summary', summaryDraft)"
-              @input="trackField('summary', $event.target.value)"
+              @input="trackField('summary', $event.target.value, $event.target.selectionStart)"
               @blur="saveSummary(); clearField()"
               @keydown.escape.prevent="cancelSummary"
               @keydown.meta.enter.prevent="summaryTextareaEl?.blur()"
@@ -422,7 +417,7 @@ import { useAuthStore } from '../stores/auth.js'
 import { supabase } from '../lib/supabase.js'
 import { useReviewsStore } from '../stores/reviews.js'
 import { useSidebar } from '../composables/useSidebar.js'
-import { getStageIcon } from '../lib/helpers.js'
+import { getStageIcon, draftSegments } from '../lib/helpers.js'
 import { fetchPaperStatus, extractPaperId, matchSiteForUrl } from '../lib/hotcrp.js'
 
 import AppSidebar from '../components/AppSidebar.vue'
@@ -898,15 +893,15 @@ function _myName() {
   return store.allPeople.find(p => p.id === store.myPeopleId)?.display_name || authStore.user?.email?.split('@')[0] || '?'
 }
 
-function trackField(field, value) {
+function trackField(field, value, cursor) {
   const name = _myName()
   _channel.value?.send({ type: 'broadcast', event: 'draft',
-    payload: { userId: authStore.user?.id, displayName: name, field: field ?? null, value: value ?? null } })
+    payload: { userId: authStore.user?.id, displayName: name, field: field ?? null, value: value ?? null, cursor: cursor ?? null } })
 }
 
-function _broadcastDraft(field, value) {
+function _broadcastDraft(field, value, cursor) {
   _channel.value?.send({ type: 'broadcast', event: 'draft',
-    payload: { userId: authStore.user?.id, displayName: _myName(), field, value: value ?? null } })
+    payload: { userId: authStore.user?.id, displayName: _myName(), field, value: value ?? null, cursor: cursor ?? null } })
 }
 function clearField() {
   const name = _myName()

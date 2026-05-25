@@ -647,7 +647,26 @@ html[data-theme="light"] .task-due-right.due-soon { color: #b45309; }
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
 }
-.live-draft-text { font-style: italic; }
+.live-draft-bg {
+  background: var(--bg2);
+  border-radius: 6px;
+  padding: 1px 5px;
+  margin: -1px -5px;
+}
+.remote-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 0.9em;
+  border-radius: 1px;
+  background: var(--cursor-color, #6366f1);
+  vertical-align: text-bottom;
+  margin: 0 0.5px;
+  animation: cursor-blink 1s ease-in-out infinite;
+}
+@keyframes cursor-blink {
+  0%, 45% { opacity: 1; }
+  55%, 100% { opacity: 0; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }

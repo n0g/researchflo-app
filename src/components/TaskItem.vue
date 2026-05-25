@@ -39,15 +39,19 @@
         <div
           v-if="!editingTitle"
           class="task-name"
-          :class="{ 'task-name-done': striking, 'live-draft-text': taskDraft }"
-          :style="taskDraft ? `color: ${taskDraft.color}` : ''"
+          :class="{ 'task-name-done': striking, 'live-draft-bg': taskDraft }"
           role="button"
           tabindex="0"
           @click.stop="startTitleEdit"
           @keydown.enter.prevent="startTitleEdit"
         >
           <span v-if="priorityLabel" class="sr-only">{{ priorityLabel }}: </span>
-          <template v-if="taskDraft">{{ taskDraft.value }}</template>
+          <template v-if="taskDraft">
+            <template v-for="(seg, i) in draftSegments(taskDraft)" :key="i">
+              <span v-if="seg.type === 'cursor'" class="remote-cursor" :style="`--cursor-color:${seg.color}`"></span>
+              <template v-else>{{ seg.value }}</template>
+            </template>
+          </template>
           <template v-else v-for="seg in contentSegments" :key="seg.i">
             <a v-if="seg.href" :href="seg.href" target="_blank" rel="noopener noreferrer" class="task-link" @click.stop>{{ seg.text }}</a>
             <template v-else>{{ seg.text }}</template>
@@ -60,7 +64,7 @@
           class="task-title-edit"
           :value="task.content"
           @focus="broadcastDraft?.(`task:${task.id}`, task.content)"
-          @input="broadcastDraft?.(`task:${task.id}`, $event.target.value)"
+          @input="broadcastDraft?.(`task:${task.id}`, $event.target.value, $event.target.selectionStart)"
           @blur="saveTitle"
           @keydown.enter.prevent="titleInputEl?.blur()"
           @keydown.escape.stop="editingTitle = false; broadcastDraft?.(`task:${task.id}`, null)"
@@ -99,7 +103,7 @@
 import { ref, computed, onBeforeUnmount } from 'vue'
 import { f7 } from 'framework7-vue/bundle'
 import { useBoardStore } from '../stores/board.js'
-import { dueStatus, formatDate, parseTaskContent } from '../lib/helpers.js'
+import { dueStatus, formatDate, parseTaskContent, draftSegments } from '../lib/helpers.js'
 
 const props = defineProps({
   task: { type: Object, required: true },
