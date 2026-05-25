@@ -366,7 +366,7 @@
             @pointerdown="onDragStart"
           >
             <template v-for="(task, idx) in tasks" :key="task.id">
-              <div v-if="dragId && dropIndex === idx" class="task-drop-indicator" aria-hidden="true" />
+              <div v-if="(dragId && dropIndex === idx) || (privateDragId && publicDropIndexForPrivate === idx)" class="task-drop-indicator" aria-hidden="true" />
               <TaskItem
                 :task="task"
                 :class="{ 'is-dragging': dragId === task.id }"
@@ -374,7 +374,7 @@
                 :task-draft="remoteDraft('task:' + task.id)"
               />
             </template>
-            <div v-if="dragId && dropIndex === tasks.length" class="task-drop-indicator" aria-hidden="true" />
+            <div v-if="(dragId && dropIndex === tasks.length) || (privateDragId && publicDropIndexForPrivate === tasks.length)" class="task-drop-indicator" aria-hidden="true" />
           </div>
 
           <!-- Quick-add -->
@@ -640,7 +640,90 @@ function _makeDragHandlers(listEl, getItems) {
 const taskListEl = ref(null)
 const privateTaskListEl = ref(null)
 const { dragId, dropIndex, onDragStart, onDragEnd } = _makeDragHandlers(taskListEl, () => tasks.value)
-const { dragId: privateDragId, dropIndex: privateDropIndex, onDragStart: onPrivateDragStart } = _makeDragHandlers(privateTaskListEl, () => privateTasks.value)
+
+// Private drag — supports cross-list drop into public list (makes task public)
+const privateDragId = ref(null)
+const privateDropIndex = ref(-1)
+const publicDropIndexForPrivate = ref(-1) // cross-list indicator
+
+function onPrivateDragStart(e) {
+  if (!e.target.closest('.task-handle')) return
+  const wrap = e.target.closest('.task-item-wrap')
+  if (!wrap) return
+  const taskEl = wrap.querySelector('[id^="task-"]')
+  if (!taskEl) return
+  e.preventDefault()
+  privateDragId.value = taskEl.id.replace('task-', '')
+  privateDropIndex.value = privateTasks.value.findIndex(t => t.id === privateDragId.value)
+  document.body.style.userSelect = 'none'
+  document.addEventListener('pointermove', onPrivateDragMove, { passive: true })
+  document.addEventListener('pointerup', onPrivateDragEnd, { once: true })
+  document.addEventListener('pointercancel', onPrivateDragEnd, { once: true })
+}
+
+function onPrivateDragMove(e) {
+  if (!privateDragId.value) return
+  // Check if cursor is over the public list
+  if (taskListEl.value) {
+    const rect = taskListEl.value.getBoundingClientRect()
+    if (e.clientY >= rect.top && e.clientY <= rect.bottom) {
+      const wraps = [...taskListEl.value.querySelectorAll('.task-item-wrap')]
+      let idx = wraps.length
+      for (let i = 0; i < wraps.length; i++) {
+        const r = wraps[i].getBoundingClientRect()
+        if (e.clientY < r.top + r.height / 2) { idx = i; break }
+      }
+      publicDropIndexForPrivate.value = idx
+      privateDropIndex.value = -1
+      return
+    }
+  }
+  // Cursor over private list
+  publicDropIndexForPrivate.value = -1
+  if (!privateTaskListEl.value) return
+  const wraps = [...privateTaskListEl.value.querySelectorAll('.task-item-wrap')]
+  let idx = wraps.length
+  for (let i = 0; i < wraps.length; i++) {
+    const r = wraps[i].getBoundingClientRect()
+    if (e.clientY < r.top + r.height / 2) { idx = i; break }
+  }
+  privateDropIndex.value = idx
+}
+
+async function onPrivateDragEnd() {
+  document.removeEventListener('pointermove', onPrivateDragMove)
+  document.body.style.userSelect = ''
+  if (!privateDragId.value) return
+  const taskId = privateDragId.value
+
+  if (publicDropIndexForPrivate.value >= 0) {
+    // Drop onto public list — make task public and insert at position
+    let toIdx = publicDropIndexForPrivate.value
+    // Build new public order with the task inserted
+    const currentPublic = [...tasks.value]
+    const movedTask = privateTasks.value.find(t => t.id === taskId)
+    toIdx = Math.min(toIdx, currentPublic.length)
+    const ordered = [...currentPublic]
+    ordered.splice(toIdx, 0, movedTask)
+    await store.unPrivatizeTask(taskId, ordered.map(t => t.id)).catch(console.error)
+  } else {
+    // Same-list reorder
+    const items = privateTasks.value
+    const fromIdx = items.findIndex(t => t.id === taskId)
+    let toIdx = privateDropIndex.value > fromIdx ? privateDropIndex.value - 1 : privateDropIndex.value
+    toIdx = Math.max(0, Math.min(items.length - 1, toIdx))
+    if (fromIdx !== toIdx) {
+      const ordered = [...items]
+      const [moved] = ordered.splice(fromIdx, 1)
+      ordered.splice(toIdx, 0, moved)
+      await store.reorderTasks(ordered.map(t => t.id)).catch(console.error)
+    }
+  }
+
+  privateDragId.value = null
+  privateDropIndex.value = -1
+  publicDropIndexForPrivate.value = -1
+}
 const deadlineTask = computed(() => store.projectDeadlineTaskBase(projectId.value))
 const deadline = computed(() => store.projectDeadline(projectId.value))
 
@@ -1135,6 +1218,7 @@ onMounted(async () => {
 onUnmounted(() => {
   document.removeEventListener('click', onDocClick)
   document.removeEventListener('visibilitychange', _onVisibilityChange)
+  document.removeEventListener('pointermove', onPrivateDragMove)
   clearTimeout(celebrationTimer)
   _teardownChannel()
 })

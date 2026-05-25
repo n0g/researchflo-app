@@ -642,6 +642,21 @@ export const useBoardStore = defineStore('board', () => {
     )
   }
 
+  async function unPrivatizeTask(taskId, newOrderedPublicIds) {
+    const task = tasks.value.find(t => t.id === taskId)
+    if (task) task.is_private = false
+    newOrderedPublicIds.forEach((id, idx) => {
+      const t = tasks.value.find(t => t.id === id)
+      if (t) { t.sort_order = idx + 1; t.order = idx + 1 }
+    })
+    await Promise.all([
+      supabase.from('tasks').update({ is_private: false }).eq('id', taskId),
+      ...newOrderedPublicIds.map((id, idx) =>
+        supabase.from('tasks').update({ sort_order: idx + 1 }).eq('id', id)
+      )
+    ])
+  }
+
   async function quickAddTask(content, projectId, isPrivate = false) {
     const { data: { user } } = await supabase.auth.getUser()
     const { data: task, error } = await supabase.from('tasks')
@@ -769,7 +784,7 @@ export const useBoardStore = defineStore('board', () => {
     initStages, saveToken, saveStages, resetToken, loadData, loadIfStale,
     projectStage, projectStatusTask, projectMeta, projectTasks, privateProjectTasks,
     completedProjectTasks, completedProjectTaskCount, fetchCompletedTasks, fetchCompletedCount, projectDeadline,
-    moveStage, completeTask, uncompleteTask, deleteTask, reorderTasks, quickAddTask, updateTaskContent, updateTaskDue,
+    moveStage, completeTask, uncompleteTask, deleteTask, reorderTasks, unPrivatizeTask, quickAddTask, updateTaskContent, updateTaskDue,
     completedInboxTasks,
     saveGCalEvent, saveScheduledTime, clearScheduledTime, updateStatusText,
     updateVenue, setDeadlineDate, addCollaborator, removeCollaborator, renameProject,
