@@ -377,6 +377,41 @@
             <div v-if="dragId && dropIndex === tasks.length" class="task-drop-indicator" aria-hidden="true" />
           </div>
 
+          <!-- Quick-add -->
+          <div class="task-quick-add-wrap" :class="{ 'task-quick-add-wrap-sep': tasks.length }">
+            <div
+              v-if="!addingTask"
+              class="task-quick-add-row"
+              role="button"
+              tabindex="0"
+              @click="startAddTask"
+              @keydown.enter.prevent="startAddTask"
+              @keydown.space.prevent="startAddTask"
+            >
+              <div class="task-handle-spacer" aria-hidden="true"></div>
+              <div class="task-quick-add-btn" aria-hidden="true">
+                <i class="ph ph-plus"></i>
+              </div>
+              <span class="task-quick-add-label">Add task</span>
+            </div>
+            <div v-else class="task-quick-add-row task-quick-add-editing">
+              <div class="task-handle-spacer" aria-hidden="true"></div>
+              <div class="task-quick-add-btn" aria-hidden="true">
+                <i class="ph ph-plus"></i>
+              </div>
+              <input
+                ref="quickAddInputEl"
+                v-model="newTaskContent"
+                class="quick-add-input"
+                type="text"
+                placeholder="Task name"
+                @keydown.enter.prevent="submitAddTask"
+                @keydown.escape.stop="cancelAddTask"
+                @blur="onQuickAddBlur"
+              >
+            </div>
+          </div>
+
           <!-- Private tasks section -->
           <div class="task-section-header" @click="togglePrivate">
             <span class="task-section-caret" :class="{ expanded: showPrivate }"><i class="ph ph-caret-right" aria-hidden="true"></i></span>
@@ -426,7 +461,7 @@
           <!-- Completed tasks section -->
           <div class="task-section-header task-section-archive" @click="toggleArchive">
             <span class="task-section-caret" :class="{ expanded: showArchive }"><i class="ph ph-caret-right" aria-hidden="true"></i></span>
-            <i class="ph ph-archive-box task-section-icon" aria-hidden="true"></i>
+            <i class="ph ph-archive task-section-icon" aria-hidden="true"></i>
             <span class="task-section-label">Completed</span>
             <span v-if="!loadingArchive" class="task-section-count">· {{ completedTasks.length }}</span>
             <i v-else class="ph ph-arrow-clockwise spin-icon task-section-loading" aria-hidden="true"></i>
@@ -440,41 +475,6 @@
                 :archived="true"
                 :on-restore="restoreTask"
               />
-            </div>
-          </div>
-
-          <!-- Quick-add -->
-          <div class="task-quick-add-wrap" :class="{ 'task-quick-add-wrap-sep': tasks.length }">
-            <div
-              v-if="!addingTask"
-              class="task-quick-add-row"
-              role="button"
-              tabindex="0"
-              @click="startAddTask"
-              @keydown.enter.prevent="startAddTask"
-              @keydown.space.prevent="startAddTask"
-            >
-              <div class="task-handle-spacer" aria-hidden="true"></div>
-              <div class="task-quick-add-btn" aria-hidden="true">
-                <i class="ph ph-plus"></i>
-              </div>
-              <span class="task-quick-add-label">Add task</span>
-            </div>
-            <div v-else class="task-quick-add-row task-quick-add-editing">
-              <div class="task-handle-spacer" aria-hidden="true"></div>
-              <div class="task-quick-add-btn" aria-hidden="true">
-                <i class="ph ph-plus"></i>
-              </div>
-              <input
-                ref="quickAddInputEl"
-                v-model="newTaskContent"
-                class="quick-add-input"
-                type="text"
-                placeholder="Task name"
-                @keydown.enter.prevent="submitAddTask"
-                @keydown.escape.stop="cancelAddTask"
-                @blur="onQuickAddBlur"
-              >
             </div>
           </div>
 
