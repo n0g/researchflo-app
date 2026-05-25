@@ -65,7 +65,7 @@
             <span class="task-section-caret" :class="{ expanded: showArchive }"><i class="ph ph-caret-right" aria-hidden="true"></i></span>
             <i class="ph ph-archive task-section-icon" aria-hidden="true"></i>
             <span class="task-section-label">Completed</span>
-            <span v-if="!loadingArchive" class="task-section-count">· {{ completedTasks.length }}</span>
+            <span v-if="!loadingArchive" class="task-section-count">· {{ completedCount }}</span>
             <i v-else class="ph ph-arrow-clockwise spin-icon task-section-loading" aria-hidden="true"></i>
           </div>
           <div v-if="showArchive" class="task-section-body">
@@ -161,6 +161,7 @@ const inboxTasks = computed(() =>
 const showArchive = ref(false)
 const loadingArchive = ref(false)
 const completedTasks = computed(() => store.completedInboxTasks())
+const completedCount = computed(() => store.completedProjectTaskCount(null))
 
 async function toggleArchive() {
   showArchive.value = !showArchive.value
@@ -200,6 +201,7 @@ function onAddBlur() {
 
 onMounted(async () => {
   await store.loadIfStale()
+  store.fetchCompletedCount(null).catch(console.error)
 })
 
 onUnmounted(() => {

@@ -32,6 +32,8 @@ export const useBoardStore = defineStore('board', () => {
   const myPeopleId = ref(null)
   // Cache of completed tasks per project, fetched on demand: projectId → task[]
   const completedTasksCache = ref({})
+  // Lightweight count cache populated on page load: cacheKey → number
+  const completedCountCache = ref({})
 
   // ── Computed ───────────────────────────────────────────────────────────────
   const stageLabels = computed(() => (stages.value || []).map(s => s.id).filter(Boolean))
@@ -284,8 +286,24 @@ export const useBoardStore = defineStore('board', () => {
       .sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
   }
 
+  function _ck(projectId) { return projectId ?? '__inbox__' }
+
   function completedProjectTasks(projectId) {
-    return completedTasksCache.value[projectId] || []
+    return completedTasksCache.value[_ck(projectId)] || []
+  }
+
+  function completedProjectTaskCount(projectId) {
+    const key = _ck(projectId)
+    return completedTasksCache.value[key]?.length ?? completedCountCache.value[key] ?? 0
+  }
+
+  async function fetchCompletedCount(projectId) {
+    const key = _ck(projectId)
+    let query = supabase.from('tasks').select('*', { count: 'exact', head: true }).eq('is_completed', true)
+    query = projectId === null ? query.is('project_id', null) : query.eq('project_id', projectId)
+    const { count, error } = await query
+    if (error) throw new Error(error.message)
+    completedCountCache.value = { ...completedCountCache.value, [key]: count ?? 0 }
   }
 
   async function fetchCompletedTasks(projectId) {
@@ -294,12 +312,37 @@ export const useBoardStore = defineStore('board', () => {
     const { data, error } = await query
     if (error) throw new Error(error.message)
     const transformed = (data || []).map(t => _transformTask(t))
-    const cacheKey = projectId ?? '__inbox__'
-    completedTasksCache.value = { ...completedTasksCache.value, [cacheKey]: transformed }
+    const key = _ck(projectId)
+    completedTasksCache.value = { ...completedTasksCache.value, [key]: transformed }
+    completedCountCache.value = { ...completedCountCache.value, [key]: transformed.length }
   }
 
   function completedInboxTasks() {
     return completedTasksCache.value['__inbox__'] || []
+  }
+
+  function _addToCompletedCache(row) {
+    const key = _ck(row.project_id)
+    const fullCache = completedTasksCache.value[key]
+    if (fullCache !== undefined) {
+      completedTasksCache.value = { ...completedTasksCache.value, [key]: [_transformTask(row), ...fullCache] }
+    } else if (completedCountCache.value[key] !== undefined) {
+      completedCountCache.value = { ...completedCountCache.value, [key]: completedCountCache.value[key] + 1 }
+    }
+  }
+
+  function _removeFromCompletedCache(taskId, projectId) {
+    const key = _ck(projectId)
+    const fullCache = completedTasksCache.value[key]
+    if (fullCache !== undefined) {
+      const next = fullCache.filter(t => t.id !== taskId)
+      if (next.length < fullCache.length) {
+        completedTasksCache.value = { ...completedTasksCache.value, [key]: next }
+        completedCountCache.value = { ...completedCountCache.value, [key]: next.length }
+      }
+    } else if (completedCountCache.value[key] !== undefined) {
+      completedCountCache.value = { ...completedCountCache.value, [key]: Math.max(0, completedCountCache.value[key] - 1) }
+    }
   }
 
   function projectDeadline(projectId) {
@@ -477,12 +520,15 @@ export const useBoardStore = defineStore('board', () => {
   function applyRealtimeTask(event, newRow, oldRow) {
     if (event === 'DELETE') {
       tasks.value = tasks.value.filter(t => t.id !== oldRow.id)
+      _removeFromCompletedCache(oldRow.id, oldRow.project_id)
       return
     }
     if (newRow.is_completed) {
       tasks.value = tasks.value.filter(t => t.id !== newRow.id)
+      if (!oldRow?.is_completed) _addToCompletedCache(newRow)
       return
     }
+    if (oldRow?.is_completed) _removeFromCompletedCache(newRow.id, newRow.project_id)
     const transformed = _transformTask(newRow)
     const idx = tasks.value.findIndex(t => t.id === transformed.id)
     if (idx >= 0) tasks.value.splice(idx, 1, transformed)
@@ -722,7 +768,7 @@ export const useBoardStore = defineStore('board', () => {
     excludedSectionIds, deadlineSectionIds, allCollaborators, allVenues, allPeople, setupStatus, myPeopleId,
     initStages, saveToken, saveStages, resetToken, loadData, loadIfStale,
     projectStage, projectStatusTask, projectMeta, projectTasks, privateProjectTasks,
-    completedProjectTasks, fetchCompletedTasks, projectDeadline,
+    completedProjectTasks, completedProjectTaskCount, fetchCompletedTasks, fetchCompletedCount, projectDeadline,
     moveStage, completeTask, uncompleteTask, deleteTask, reorderTasks, quickAddTask, updateTaskContent, updateTaskDue,
     completedInboxTasks,
     saveGCalEvent, saveScheduledTime, clearScheduledTime, updateStatusText,

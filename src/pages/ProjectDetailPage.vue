@@ -466,7 +466,7 @@
             <span class="task-section-caret" :class="{ expanded: showArchive }"><i class="ph ph-caret-right" aria-hidden="true"></i></span>
             <i class="ph ph-archive task-section-icon" aria-hidden="true"></i>
             <span class="task-section-label">Completed</span>
-            <span v-if="!loadingArchive" class="task-section-count">· {{ completedTasks.length }}</span>
+            <span v-if="!loadingArchive" class="task-section-count">· {{ completedCount }}</span>
             <i v-else class="ph ph-arrow-clockwise spin-icon task-section-loading" aria-hidden="true"></i>
           </div>
           <div v-if="showArchive" class="task-section-body">
@@ -528,6 +528,7 @@ const meta = computed(() => store.projectMeta(projectId.value))
 const tasks = computed(() => store.projectTasks(projectId.value))
 const privateTasks = computed(() => store.privateProjectTasks(projectId.value))
 const completedTasks = computed(() => store.completedProjectTasks(projectId.value))
+const completedCount = computed(() => store.completedProjectTaskCount(projectId.value))
 
 const showPrivate = ref(false)
 const showArchive = ref(false)
@@ -1126,6 +1127,7 @@ onMounted(async () => {
   document.addEventListener('visibilitychange', _onVisibilityChange)
   store.initStages()
   await store.loadIfStale()
+  store.fetchCompletedCount(projectId.value).catch(console.error)
   _setupChannel()
   if (submissionUrl.value && matchedSite.value && paperIdFromUrl.value) loadSubmissionStatus()
 })
