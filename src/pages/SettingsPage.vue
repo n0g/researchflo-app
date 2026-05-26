@@ -18,13 +18,13 @@
             <i class="ph ph-article" aria-hidden="true"></i>
             <span class="sidebar-label">HotCRP</span>
           </button>
-          <button class="sidebar-nav-item" title="Scheduling" @click="scrollTo('settings-scheduling')">
-            <i class="ph ph-clock" aria-hidden="true"></i>
-            <span class="sidebar-label">Scheduling</span>
-          </button>
           <button class="sidebar-nav-item" title="Google Calendar" @click="scrollTo('settings-calendar')">
             <i class="ph ph-calendar-dots" aria-hidden="true"></i>
             <span class="sidebar-label">Calendar</span>
+          </button>
+          <button class="sidebar-nav-item" title="Scheduling" @click="scrollTo('settings-scheduling')">
+            <i class="ph ph-clock" aria-hidden="true"></i>
+            <span class="sidebar-label">Scheduling</span>
           </button>
           <button class="sidebar-nav-item" title="MCP Server" @click="scrollTo('settings-mcp')">
             <i class="ph ph-plugs" aria-hidden="true"></i>
