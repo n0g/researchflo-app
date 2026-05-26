@@ -34,69 +34,74 @@ function toolOk(text: string) {
 const TOOLS = [
   {
     name: 'list_projects',
-    description: 'List all research projects with their stage, open task count, deadline, and venue.',
+    description: 'List all research projects with their stage, open task count, deadline, and venue. Returns project_id values needed by list_tasks, update_project, add_task, and get_stage_history.',
     inputSchema: {
       type: 'object',
+      additionalProperties: false,
       properties: {
-        stage: { type: 'string', description: 'Filter by stage name, e.g. "Planning" or "Preparing"' },
+        stage: { type: 'string', description: 'Filter by stage name (e.g. "Planning", "Preparing"). Stage names appear in the results of this tool.' },
       },
     },
   },
   {
     name: 'list_tasks',
-    description: 'List tasks, optionally filtered by project or completion status.',
+    description: 'List tasks filtered by project or completion status. Use list_projects first to get a project_id. Returns task_id values needed by update_task and mark_task_complete.',
     inputSchema: {
       type: 'object',
+      additionalProperties: false,
       properties: {
-        project_id: { type: 'string', description: 'Filter by project UUID (omit for all tasks)' },
-        include_completed: { type: 'boolean', description: 'Include completed tasks (default: false)' },
+        project_id: { type: 'string', description: 'UUID from list_projects. Omit to return all tasks across all projects including inbox.' },
+        include_completed: { type: 'boolean', description: 'Include completed tasks. Default: false.' },
       },
     },
   },
   {
     name: 'get_project_stats',
-    description: 'Get task completion statistics and deadline overview across all projects.',
-    inputSchema: { type: 'object', properties: {} },
+    description: 'Get task completion statistics and deadline overview across all projects. Good starting point for a weekly review or sprint planning.',
+    inputSchema: { type: 'object', additionalProperties: false, properties: {} },
   },
   {
     name: 'mark_task_complete',
-    description: 'Mark a task as completed.',
+    description: 'Mark a task as completed. Use list_tasks to get the task_id.',
     inputSchema: {
       type: 'object',
+      additionalProperties: false,
       required: ['task_id'],
       properties: {
-        task_id: { type: 'string', description: 'UUID of the task to complete' },
+        task_id: { type: 'string', description: 'UUID from list_tasks.' },
       },
     },
   },
   {
     name: 'add_task',
-    description: 'Create a new task, optionally assigned to a project (omit project_id for inbox).',
+    description: 'Create a new task. Use list_projects to get a project_id, or omit it to add to inbox. Can be called multiple times in sequence to capture several tasks from a meeting.',
     inputSchema: {
       type: 'object',
+      additionalProperties: false,
       required: ['content'],
       properties: {
-        content: { type: 'string', description: 'Task title' },
-        project_id: { type: 'string', description: 'UUID of the project (omit for inbox)' },
-        priority: { type: 'number', description: '1=normal 2=medium 3=high 4=urgent' },
-        due_date: { type: 'string', description: 'Due date in YYYY-MM-DD format' },
-        description: { type: 'string', description: 'Optional longer description' },
+        content: { type: 'string', description: 'Task title.' },
+        project_id: { type: 'string', description: 'UUID from list_projects. Omit to add to inbox.' },
+        priority: { type: 'number', enum: [1, 2, 3, 4], description: '1=normal, 2=medium, 3=high, 4=urgent.' },
+        due_date: { type: 'string', description: 'Due date in YYYY-MM-DD format.' },
+        description: { type: 'string', description: 'Optional longer description or notes.' },
       },
     },
   },
   {
     name: 'update_task',
-    description: 'Update fields on an existing task.',
+    description: 'Update fields on an existing task. Use list_tasks to get the task_id. Only provided fields are changed.',
     inputSchema: {
       type: 'object',
+      additionalProperties: false,
       required: ['task_id'],
       properties: {
-        task_id: { type: 'string', description: 'UUID of the task' },
-        content: { type: 'string', description: 'New title' },
-        priority: { type: 'number', description: '1=normal 2=medium 3=high 4=urgent' },
-        due_date: { type: 'string', description: 'Due date in YYYY-MM-DD, or empty string to clear' },
-        description: { type: 'string', description: 'Updated description' },
-        project_id: { type: 'string', description: 'Move to this project UUID, or empty string for inbox' },
+        task_id: { type: 'string', description: 'UUID from list_tasks.' },
+        content: { type: 'string', description: 'New title.' },
+        priority: { type: 'number', enum: [1, 2, 3, 4], description: '1=normal, 2=medium, 3=high, 4=urgent.' },
+        due_date: { type: 'string', description: 'Due date in YYYY-MM-DD format. Pass empty string to clear.' },
+        description: { type: 'string', description: 'Updated description.' },
+        project_id: { type: 'string', description: 'Move to this project UUID from list_projects. Pass empty string to move to inbox.' },
       },
     },
   },
@@ -105,93 +110,99 @@ const TOOLS = [
     description: 'Create a new research project.',
     inputSchema: {
       type: 'object',
+      additionalProperties: false,
       required: ['name'],
       properties: {
-        name: { type: 'string', description: 'Project name' },
-        stage: { type: 'string', description: 'Stage name, e.g. "Planning". Defaults to first stage.' },
-        venue: { type: 'string', description: 'Conference or journal name' },
-        deadline: { type: 'string', description: 'Submission deadline in YYYY-MM-DD' },
-        summary: { type: 'string', description: 'Project summary' },
+        name: { type: 'string', description: 'Project name.' },
+        stage: { type: 'string', description: 'Stage name (e.g. "Planning", "Preparing to Submit"). Stage names are visible in list_projects results. Defaults to the first stage.' },
+        venue: { type: 'string', description: 'Conference or journal name.' },
+        deadline: { type: 'string', description: 'Submission deadline in YYYY-MM-DD format.' },
+        summary: { type: 'string', description: 'Project summary.' },
       },
     },
   },
   {
     name: 'update_project',
-    description: "Update a project's metadata.",
+    description: "Update a project's metadata. Use list_projects to get the project_id. Only provided fields are changed. Useful for bulk status updates after a meeting.",
     inputSchema: {
       type: 'object',
+      additionalProperties: false,
       required: ['project_id'],
       properties: {
-        project_id: { type: 'string', description: 'UUID of the project' },
-        name: { type: 'string', description: 'New project name' },
-        stage: { type: 'string', description: 'Stage name to move to' },
-        venue: { type: 'string', description: 'Conference or journal name' },
-        deadline: { type: 'string', description: 'Submission deadline in YYYY-MM-DD, or empty string to clear' },
-        summary: { type: 'string', description: 'Project summary' },
-        submission_url: { type: 'string', description: 'Submission URL' },
-        status_text: { type: 'string', description: 'Status text shown on the board card' },
-      },
-    },
-  },
-  {
-    name: 'list_calendars',
-    description: "List the user's Google Calendars with their IDs, names, and access roles.",
-    inputSchema: { type: 'object', properties: {} },
-  },
-  {
-    name: 'get_events',
-    description: 'Fetch Google Calendar events for a single day or a date range (max 2 weeks). Returns events from the primary calendar by default.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        date: { type: 'string', description: 'Single day in YYYY-MM-DD format (alternative to start_date/end_date)' },
-        start_date: { type: 'string', description: 'Start of range in YYYY-MM-DD format' },
-        end_date: { type: 'string', description: 'End of range in YYYY-MM-DD format (inclusive, max 14 days from start_date)' },
-        calendar_id: { type: 'string', description: 'Calendar ID to fetch from (default: "primary")' },
-      },
-    },
-  },
-  {
-    name: 'add_event',
-    description: 'Create a new Google Calendar event. Use ISO 8601 datetime strings for timed events (e.g. "2026-05-26T14:00:00") or YYYY-MM-DD for all-day events.',
-    inputSchema: {
-      type: 'object',
-      required: ['summary', 'start', 'end'],
-      properties: {
-        summary: { type: 'string', description: 'Event title' },
-        start: { type: 'string', description: 'Start as ISO 8601 datetime or YYYY-MM-DD for all-day' },
-        end: { type: 'string', description: 'End as ISO 8601 datetime or YYYY-MM-DD for all-day' },
-        description: { type: 'string', description: 'Event description / notes' },
-        timezone: { type: 'string', description: 'IANA timezone (e.g. "America/New_York"). Defaults to UTC.' },
-        calendar_id: { type: 'string', description: 'Target calendar ID (defaults to the user\'s configured write calendar or "primary")' },
-      },
-    },
-  },
-  {
-    name: 'update_event',
-    description: 'Update an existing Google Calendar event. Only provided fields are changed.',
-    inputSchema: {
-      type: 'object',
-      required: ['event_id', 'calendar_id'],
-      properties: {
-        event_id: { type: 'string', description: 'Google Calendar event ID' },
-        calendar_id: { type: 'string', description: 'Calendar ID the event belongs to' },
-        summary: { type: 'string', description: 'New event title' },
-        start: { type: 'string', description: 'New start as ISO 8601 datetime or YYYY-MM-DD' },
-        end: { type: 'string', description: 'New end as ISO 8601 datetime or YYYY-MM-DD' },
-        description: { type: 'string', description: 'New description' },
-        timezone: { type: 'string', description: 'IANA timezone for start/end if timed. Defaults to UTC.' },
+        project_id: { type: 'string', description: 'UUID from list_projects.' },
+        name: { type: 'string', description: 'New project name.' },
+        stage: { type: 'string', description: 'Stage name to move the project to (e.g. "Revision"). Stage names are visible in list_projects results.' },
+        venue: { type: 'string', description: 'Conference or journal name.' },
+        deadline: { type: 'string', description: 'Submission deadline in YYYY-MM-DD format. Pass empty string to clear.' },
+        summary: { type: 'string', description: 'Project summary.' },
+        submission_url: { type: 'string', description: 'Submission URL.' },
+        status_text: { type: 'string', description: 'Short status text shown on the Kanban board card (e.g. "Waiting for co-author feedback").' },
       },
     },
   },
   {
     name: 'get_stage_history',
-    description: 'Get the pipeline stage history for a project, showing how long it spent (or has spent) in each stage. Useful for identifying stuck projects.',
+    description: 'Get the pipeline stage history for a project, showing how long it spent (or has spent) in each stage. Useful for identifying stuck projects. Use list_projects to get the project_id.',
     inputSchema: {
       type: 'object',
+      additionalProperties: false,
       required: ['project_id'],
       properties: {
-        project_id: { type: 'string', description: 'UUID of the project' },
+        project_id: { type: 'string', description: 'UUID from list_projects.' },
+      },
+    },
+  },
+  {
+    name: 'list_calendars',
+    description: "List the user's Google Calendars with IDs, names, and access roles. Call this first to get calendar_id values for get_events, add_event, and update_event.",
+    inputSchema: { type: 'object', additionalProperties: false, properties: {} },
+  },
+  {
+    name: 'get_events',
+    description: 'Fetch Google Calendar events. You MUST provide either "date" (single day) or both "start_date" and "end_date" (range, max 2 weeks). Use list_calendars to resolve calendar_id. Returns event_id and calendar_id needed by update_event.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        date: { type: 'string', description: 'Single day in YYYY-MM-DD format. Use this OR start_date+end_date, not both.' },
+        start_date: { type: 'string', description: 'Start of date range in YYYY-MM-DD format. Requires end_date.' },
+        end_date: { type: 'string', description: 'End of date range in YYYY-MM-DD format (inclusive). Maximum 14 days after start_date.' },
+        calendar_id: { type: 'string', description: 'Calendar ID from list_calendars. Defaults to "primary".' },
+      },
+    },
+  },
+  {
+    name: 'add_event',
+    description: 'Create a new Google Calendar event. Use list_calendars to find the right calendar_id. For timed events provide an ISO 8601 datetime and always include timezone; for all-day events use YYYY-MM-DD dates.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['summary', 'start', 'end'],
+      properties: {
+        summary: { type: 'string', description: 'Event title.' },
+        start: { type: 'string', description: 'Start as ISO 8601 datetime (e.g. "2026-05-26T14:00:00") for timed events, or YYYY-MM-DD for all-day.' },
+        end: { type: 'string', description: 'End as ISO 8601 datetime or YYYY-MM-DD. For all-day events this is the exclusive end date (day after the last day).' },
+        description: { type: 'string', description: 'Event description or notes.' },
+        timezone: { type: 'string', description: 'IANA timezone (e.g. "America/New_York", "Europe/Berlin"). Required for timed events; defaults to UTC.' },
+        calendar_id: { type: 'string', description: 'Target calendar ID from list_calendars. Defaults to the user\'s configured write calendar or "primary".' },
+      },
+    },
+  },
+  {
+    name: 'update_event',
+    description: 'Update an existing Google Calendar event. Use get_events to find event_id and calendar_id. Only provided fields are changed.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['event_id', 'calendar_id'],
+      properties: {
+        event_id: { type: 'string', description: 'Google Calendar event ID from get_events.' },
+        calendar_id: { type: 'string', description: 'Calendar ID the event belongs to, from get_events or list_calendars.' },
+        summary: { type: 'string', description: 'New event title.' },
+        start: { type: 'string', description: 'New start as ISO 8601 datetime or YYYY-MM-DD.' },
+        end: { type: 'string', description: 'New end as ISO 8601 datetime or YYYY-MM-DD.' },
+        description: { type: 'string', description: 'New event description.' },
+        timezone: { type: 'string', description: 'IANA timezone for start/end if timed (e.g. "America/New_York"). Defaults to UTC.' },
       },
     },
   },
@@ -735,6 +746,46 @@ Deno.serve(async (req) => {
         protocolVersion: '2024-11-05',
         capabilities: { tools: {} },
         serverInfo: { name: 'researchflo', version: '1.0.0' },
+        instructions: `researchflo manages academic research projects and tasks, with Google Calendar integration for scheduling.
+
+TOOL CHAINING (call in this order):
+- Projects: list_projects → update_project / add_task / get_stage_history
+- Tasks: list_projects → list_tasks → update_task / mark_task_complete
+- Calendar: list_calendars → get_events → update_event
+- New event: list_calendars → add_event
+
+ID SOURCES:
+- project_id → list_projects
+- task_id → list_tasks
+- calendar_id → list_calendars (or from get_events results)
+- event_id → get_events
+
+FORMATS:
+- Dates: YYYY-MM-DD (e.g. "2026-05-26")
+- Datetimes: ISO 8601 (e.g. "2026-05-26T14:00:00"). Always include timezone for timed calendar events.
+- Priority: 1=normal, 2=medium, 3=high, 4=urgent
+
+COMMON WORKFLOWS:
+
+Weekly review / sprint planning:
+  1. get_project_stats — see deadline pressure and open task counts
+  2. list_projects — identify which projects need attention
+  3. update_project (multiple) — update status_text or stage for each project discussed
+  4. list_calendars + get_events — check the week's calendar for conflicts
+
+Batch task capture after a meeting:
+  1. list_projects — find the relevant project_id
+  2. add_task (repeat) — one call per task captured; set priority and due_date while context is fresh
+
+Schedule tasks for the week:
+  1. list_tasks — find open tasks to schedule
+  2. list_calendars — resolve calendar_id once
+  3. get_events — check existing commitments for the target days
+  4. add_event (repeat) — block time for each task
+
+Quick project status update:
+  1. list_projects — get project_id and current state
+  2. update_project — set new stage, status_text, deadline in a single call`,
       })
     }
 
