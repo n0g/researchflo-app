@@ -22,8 +22,8 @@ export default defineConfig(({ command }) => ({
         }],
       },
       manifest: {
-        name: 'Research Board',
-        short_name: 'Research',
+        name: 'researchflo',
+        short_name: 'researchflo',
         description: 'Research project pipeline tracker',
         start_url: BASE,
         scope: BASE,
