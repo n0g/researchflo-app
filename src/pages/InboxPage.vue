@@ -61,14 +61,14 @@
           </div>
 
           <!-- Completed tasks section -->
-          <div class="task-section-header task-section-private" @click="toggleArchive">
+          <div v-if="completedCount > 0" class="task-section-header task-section-private" @click="toggleArchive">
             <span class="task-section-caret" :class="{ expanded: showArchive }"><i class="ph ph-caret-right" aria-hidden="true"></i></span>
             <i class="ph ph-archive task-section-icon" aria-hidden="true"></i>
             <span class="task-section-label">Completed</span>
             <span v-if="!loadingArchive" class="task-section-count">· {{ completedCount }}</span>
             <i v-else class="ph ph-arrow-clockwise spin-icon task-section-loading" aria-hidden="true"></i>
           </div>
-          <div v-if="showArchive" class="task-section-body">
+          <div v-if="completedCount > 0 && showArchive" class="task-section-body">
             <div role="list" aria-label="Completed inbox tasks">
               <TaskItem
                 v-for="task in completedTasks"
