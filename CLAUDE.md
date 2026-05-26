@@ -1,306 +1,366 @@
-# Research Board App
+# researchflo
 
-A PWA that displays Todoist research projects as a Kanban board, organized by pipeline stage. Has a secondary Reviews screen (in progress) for tracking HotCRP paper reviews.
+A PWA for managing a research paper pipeline. Projects live on a Kanban board organized by pipeline stage (Planning → Data Collection → Preparing → Revision → Awaiting Reviews → On Ice). Includes task triage, a weekly calendar view for scheduling tasks, HotCRP paper review tracking, and a Claude MCP server for AI-assisted project management.
 
 ## Tech Stack
 
 - **Framework7 + Vue 3 + Pinia** — component-based UI with iOS native feel
-- **Vite** — build tool; `base: './'` for GitHub Pages compatibility
-- **vite-plugin-pwa** — generates service worker and handles precaching (replaces manual `sw.js`)
-- **Todoist REST API v1** (`https://api.todoist.com/api/v1`)
+- **Vite + vite-plugin-pwa** — build tool + service worker / PWA manifest
+- **Supabase** — backend: Postgres database, auth (magic link + passkeys), real-time subscriptions, Edge Functions
+- **Google Calendar** — OAuth via Edge Functions; events linked to tasks
+- **CalDAV / iCloud** — server-side CalDAV proxy Edge Function; supports generic CalDAV and iCloud calendars
 - **GitHub Actions** (`deploy.yml`) — builds and deploys `dist/` to GitHub Pages on push to `main`
-- **Google Fonts CDN** — Inter (UI font) + Material Symbols Outlined (icons); loaded via `<link>` in `index.html`
+- **Google Fonts CDN** — Inter (UI font) + Phosphor Icons; loaded via `<link>` in `index.html`
 
 ### File Structure
 
 ```
 src/
   main.js           — Vue app entry; F7 + Pinia setup; toggles .dark class on <html>
-  routes.js         — F7 router routes (/, /token/, /board/, /setup/, /reviews/, /hotcrp/, /project/:id/)
-  App.vue           — f7-app root; sets initialUrl from store before F7 boots; calls useTheme() for OS listener
+  config.js         — GCAL_CLIENT_ID constant
+  routes.js         — F7 router routes (all pages listed below)
+  App.vue           — f7-app root; auth gate (initialized/user); passkey setup modal; tab views
   pages/
-    TokenPage.vue        — API token entry
-    BoardPage.vue        — main board with PTR, keyboard shortcuts, bottom tabbar
-    ProjectDetailPage.vue — full-page split-panel project detail (route: /project/:id/)
-    SetupPage.vue        — stage configuration with drag-to-reorder
-    ReviewsPage.vue      — HotCRP paper review list, grouped by site; bottom tabbar
-    HotCRPPage.vue       — CORS proxy URL + HotCRP site management (add/remove sites)
+    LoginPage.vue         — magic link email entry + passkey authentication
+    BoardPage.vue         — main Kanban board with PTR, keyboard shortcuts, sidebar
+    ProjectDetailPage.vue — split-panel project detail (/project/:id/)
+    NewProjectPage.vue    — create a new project (/project/new/)
+    InboxPage.vue         — inbox tasks (no project) + triage entry point (/inbox/)
+    TaskDetailPage.vue    — full-page task detail with triage controls (/tasks/:id/)
+    TaskTriagePage.vue    — triage/scheduling UI for a single task
+    SchedulePage.vue      — weekly calendar view; drag tasks onto time slots (/schedule/)
+    SchedulePlacePage.vue — intermediate page for placing a task on the calendar
+    ReviewsPage.vue       — HotCRP paper review list, grouped by site (/reviews/)
+    HotCRPPage.vue        — HotCRP CORS proxy + site management (/hotcrp/)
+    SettingsPage.vue      — full-page settings: theme, stages, passkeys, calendar, HotCRP (/settings/)
+    InvitePage.vue        — accept a collaboration invite via token (/invite/:token/)
   components/
-    AppSidebar.vue    — shared sidebar: nav, collaborator/venue filters, collapse toggle
-    BoardColumn.vue   — single kanban column
-    ProjectCard.vue   — project card with drag-and-drop and inline status edit
-    TaskItem.vue      — task row with complete/due editing
-    SettingsSheet.vue — F7 Sheet for settings (includes theme toggle)
+    AppSidebar.vue      — shared sidebar: nav links, collaborator/venue filters, collapse toggle
+    AppTabbar.vue       — bottom tab bar (Board, Inbox, Schedule, Settings)
+    BoardColumn.vue     — single Kanban column
+    ProjectCard.vue     — project card with drag-and-drop, inline status edit, energy indicator
+    TaskItem.vue        — task row with complete/due date editing
+    TaskDetailPanel.vue — task detail side panel shown in ProjectDetailPage
   stores/
-    board.js    — Pinia store for Todoist board data; exposes allCollaborators, allVenues, activeFilter, setFilter
-    reviews.js  — Pinia store for HotCRP sites, proxy URL, and fetched paper results
+    auth.js      — user/session, magic link sign-in, passkey prompt state; onAuthStateChange
+    board.js     — projects, tasks, stages, filters, triage state, real-time subscriptions
+    calendar.js  — Google Calendar OAuth + CalDAV/iCloud; event CRUD; scheduling
+    reviews.js   — HotCRP sites, proxy URL, fetched paper results
+    settings.js  — thin Supabase wrapper: load()/save(key, value) for user_settings rows
   lib/
-    todoist.js  — api(token, path, ...) and apiAll(token, path)
-    helpers.js  — pure functions: getProjectStage, getProjectTasks, etc.
-    sortable.js — minimal drag-to-reorder for SetupPage stage list
-    hotcrp.js   — fetchReviewPapers(siteUrl, token, proxyUrl); handles CORS proxy routing
+    supabase.js  — createClient() singleton export
+    passkey.js   — WebAuthn registration/authentication via passkey-* Edge Functions
+    helpers.js   — pure functions: DEFAULT_STAGES, parseLocalDate, formatDate, etc.
+    hotcrp.js    — fetchReviewPapers/fetchWhoami via configurable CORS proxy
+    sortable.js  — minimal drag-to-reorder for stage list in SettingsPage
+    todoist.js   — legacy Todoist API helpers (kept but unused; safe to ignore)
   composables/
-    usePullToRefresh.js — custom PTR (Touch Events, 80px threshold, card-drag conflict fix)
-    useTheme.js         — theme cycling (auto/light/dark); returns themePref for SettingsSheet
-    useSidebar.js       — module-level singleton ref for sidebar collapsed state + localStorage persistence
+    usePullToRefresh.js      — custom PTR (Touch Events, 80px threshold, drag conflict guard)
+    useTheme.js              — theme cycling (auto/light/dark); OS change listener
+    useSidebar.js            — singleton collapsed state + localStorage persistence
+    useSchedulePrefs.js      — loads/caches scheduling preferences from user_settings
+    useRelativeDateGroups.js — groups tasks by relative date bucket (Today, Tomorrow, etc.)
+    useTaskTriage.js         — triage state machine (urgency + time estimate labels)
+    useAccentColor.js        — accent color CSS var management
   assets/
-    app.css         — all CSS: design tokens, F7 overrides, component styles
-    fonts/          — IBM Plex Mono woff2 files (used only for .kbd)
+    tokens.css    — CSS design tokens (light + dark)
+    shared.css    — shared component styles
+    board.css     — board + project card styles
+    project.css   — project detail page styles
+    schedule.css  — schedule page + calendar styles
+    sidebar.css   — sidebar styles
+    reviews.css   — reviews page styles
+    token-page.css — login page styles
+    fonts/        — IBM Plex Mono woff2 (used for .kbd elements only)
+supabase/
+  functions/
+    _shared/
+      caldav.ts             — shared CalDAV protocol utilities (used by caldav-proxy and mcp)
+    caldav-proxy/           — server-side CalDAV proxy (discover, list, CRUD events)
+    google-calendar-auth/   — OAuth authorization redirect
+    google-calendar-token/  — OAuth code exchange + token refresh
+    hotcrp-proxy/           — HotCRP CORS proxy (adds Authorization header server-side)
+    mcp/                    — Model Context Protocol server (15 tools; used by Claude)
+    invite-collaborator/    — email invite flow
+    account-delete/         — GDPR account deletion
+    passkey-register-start/ — WebAuthn credential creation challenge
+    passkey-register-finish/— WebAuthn credential creation verification
+    passkey-auth-start/     — WebAuthn authentication challenge
+    passkey-auth-finish/    — WebAuthn authentication verification
+    passkey-delete/         — remove a registered passkey
+  migrations/               — timestamped SQL migrations applied to the live project
+  templates/                — custom Supabase email templates (magic-link, invite, email-change)
 public/
-  favicon.ico       — multi-size favicon (16/32/48px), Stitch icon
-  icons/            — PNG icons for PWA manifest (32/180/192/512px), Stitch icon
-  manifest.json     — Web App Manifest
-index.html          — Vite entry with anti-FOUC script and CSP
-vite.config.js
+  favicon.ico   — multi-size favicon
+  icons/        — PNG icons for PWA manifest (192px + 512px)
+index.html      — Vite entry; anti-FOUC script; CSP meta tag
+vite.config.js  — Vite + PWA manifest (app name: researchflo)
 package.json
 ```
 
-## Security
+## Auth
 
-Content Security Policy via `<meta http-equiv="Content-Security-Policy">` in `index.html`:
-- `script-src 'self' 'sha256-...'` — hash covers the one inline anti-FOUC theme script
-- `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com` — needed for F7's runtime styles and Google Fonts
-- `font-src 'self' data: https://fonts.gstatic.com` — allows Google Fonts woff2 files
-- `connect-src https://api.todoist.com https:` — `https:` added to allow HotCRP proxy requests
+Two sign-in methods, both passwordless:
 
-The anti-FOUC script is exactly: `(function(){var t=localStorage.getItem('rb_theme')||'auto';document.documentElement.dataset.theme=t==='dark'||t==='auto'&&matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'})();`
+1. **Magic link** — enter email on LoginPage; Supabase sends a link; clicking it exchanges the URL hash token for a session. After magic-link sign-in, App.vue prompts the user to register a passkey (`pendingPasskeySetup` flag on auth store).
+2. **Passkey** — after registering, subsequent sign-ins use Face ID / Touch ID / device PIN via WebAuthn. The `passkey-*` Edge Functions handle challenge generation and credential verification against the `auth_challenges` and `passkeys` tables.
 
-To get its SHA-256: `printf '%s' '<script content>' | openssl dgst -sha256 -binary | openssl base64`
+`App.vue` logic:
+- `v-if="!authStore.initialized"` — shows nothing until `INITIAL_SESSION` fires (prevents flash on magic-link page load)
+- `v-else-if="!authStore.user"` — shows LoginPage view
+- Otherwise — shows four tab views: Board, Inbox, Schedule, Settings
 
-## Todoist Data Model
+## Database Schema
 
-Projects are direct children of a top-level Todoist project named **"Research"**. The app filters to only these sub-projects.
+All tables have RLS enabled. Key tables:
 
-Each research project has two sections:
-- `📌 Current Status` — contains a single task whose labels encode the pipeline stage and contact person
-- `📌 Deadlines` — contains deadline tasks (excluded from the task list view)
+**`stages`** — pipeline stages (system defaults have `owner_id IS NULL`; visible to all authenticated users)
+- `id`, `owner_id`, `name`, `slug`, `icon`, `sort_order`
 
-### Stage tracking
+**`projects`** — research projects
+- `id`, `name`, `owner_id`, `stage_id` (FK → stages), `status_text`, `venue`, `deadline`, `summary`, `submission_url`, `energy` (0/1/2 per-user via `project_energy` table), `is_inbox`, `sort_order`
 
-The stage is stored as a label on the task inside `📌 Current Status`:
+**`people`** — collaborators decoupled from auth (uninvited people can be named before they join)
+- `id`, `display_name`, `email`, `user_id` (FK → auth.users, NULL until they accept invite), `invite_token`, `invited_by`, `joined_at`
+- On new auth.users insert: trigger `handle_new_user()` claims an existing `people` row by email or creates one
 
-```
-Task content: "Preparing for submission"
-Labels: ["stage::preparing-to-submit", "Junho"]
-```
+**`project_members`** — project ↔ person membership
+- `(project_id, person_id)` PK, `role` ('owner'/'member'), `added_by`, `added_at`
 
-The non-stage labels on that task are treated as the **contact person** for the project and shown as a chip on the card.
+**`tasks`**
+- `id`, `project_id`, `created_by`, `assigned_to`, `content`, `description`, `priority` (1–4), `due_date`, `sort_order`, `is_completed`, `is_private`, `completed_at`
+- `caldav_event_uid` — linked calendar event UID
+- `caldav_calendar_id` — calendar href where the event lives
+- `scheduled_at` — scheduled datetime (mirrors the event start)
+- `labels text[]` — triage labels: `time::`, `importance::`, `scheduled`
 
-### Stage label convention
+**`user_settings`** — per-user preferences
+- `user_id` (PK), `hotcrp_sites` (jsonb), `gcal_calendar_id`, `mcp_token` (uuid for Claude MCP auth)
+- `theme`, `timezone`, `work_start_time`, `work_end_time`, `work_days int[]`, `default_task_duration_minutes`
 
-Labels follow the `stage::` prefix pattern:
+**`calendar_sources`** — connected calendar accounts (replaces single gcal/caldav columns)
+- `id`, `user_id`, `type` (CHECK: `google | caldav | icloud | ical | microsoft`), `name`, `url`, `username`, `password`
+- `access_token`, `refresh_token`, `token_expires_at` — OAuth fields for Google
+- `is_write_target` (boolean) — task events are written here
+- `enabled` (boolean)
 
-| Display name     | Todoist label                  |
-|------------------|-------------------------------|
-| Planning         | `stage::planning`              |
-| Data Collection  | `stage::data-collection`       |
-| Preparing        | `stage::preparing-to-submit`   |
-| Revision         | `stage::revision`              |
-| Awaiting Reviews | `stage::under-submission`      |
-| On Ice           | `stage::on-ice`                |
+**`passkeys`** — WebAuthn credentials
+- `id`, `user_id`, `credential_id`, `public_key`, `aaguid`, `sign_count`, `device_label`, `last_used_at`
+
+**`auth_challenges`** — short-lived WebAuthn challenges (5-min TTL, service-role-only)
+
+**`project_stage_history`** — stage transition log (appended by trigger on `projects.stage_id` update)
+
+### RLS notes
+- `can_access_project(pid)` — security-definer function used by projects/tasks policies to avoid recursion
+- Tasks: visible if `is_private=false OR created_by=auth.uid()` AND user can access the project
+- `calendar_sources`: `FOR ALL USING (user_id = auth.uid())` — fully private
+
+## Edge Functions
+
+All deployed to `https://oqqevpkeqcbkqrgabpkc.supabase.co/functions/v1/`.
+
+| Function | Purpose |
+|---|---|
+| `caldav-proxy` | Server-side CalDAV XML-over-HTTP proxy; actions: `discover`, `list_calendars`, `get_events`, `create_event`, `update_event`, `delete_event`. Reads credentials from `calendar_sources` by `source_id` or accepts inline creds for initial connection testing. |
+| `google-calendar-auth` | Generates OAuth authorization URL + PKCE/state |
+| `google-calendar-token` | Exchanges authorization code for tokens; refreshes expired tokens |
+| `hotcrp-proxy` | Adds `Authorization: Bearer` header server-side for HotCRP API requests |
+| `mcp` | Claude MCP server with 15 tools (see below). Auth via `mcp_token` UUID from `user_settings`. |
+| `invite-collaborator` | Inserts a `people` row and sends invite email |
+| `account-delete` | Deletes user data + auth account |
+| `passkey-register-start/finish` | WebAuthn credential registration flow |
+| `passkey-auth-start/finish` | WebAuthn authentication flow |
+| `passkey-delete` | Remove a registered passkey credential |
+
+### Shared CalDAV module (`_shared/caldav.ts`)
+
+Imported by `caldav-proxy` and `mcp`. Key exports:
+- `caldavRequest(url, method, headers, body)` — uses `redirect: 'manual'` and manually follows Location header to preserve PROPFIND/REPORT method through 301 redirects (needed for iCloud well-known URL)
+- `discoverCalDAV(server, auth)` — PROPFIND → `current-user-principal` → `calendar-home-set`
+- `listCalendarsFromHomeSet(homeSetUrl, auth)` — PROPFIND Depth:1
+- `getCalendarEvents(calHref, auth, timeMin, timeMax)` — REPORT with time-range filter
+- `parseCalDAVDatetime(str, tzid?)` — handles all-day, UTC (`Z`), and TZID-aware local times
+- `buildICS(...)` — produces CRLF-joined ICS; includes `X-RESEARCHBOARD-TASK-ID` property when `taskId` provided
+
+### MCP Server Tools (15 total)
+
+Used by Claude via the MCP protocol. Auth: `Authorization: Bearer {mcp_token}` where `mcp_token` is from `user_settings`.
+
+| Tool | Description |
+|---|---|
+| `list_projects` | All projects with stage, task count, deadline, venue |
+| `list_tasks` | Tasks by project or across all; optional `include_completed` |
+| `get_project_stats` | Task completion stats + deadline overview |
+| `mark_task_complete` | Mark a task done |
+| `add_task` | Create a task; omit `project_id` for inbox |
+| `update_task` | Update any task fields; move to different project |
+| `add_project` | Create a new project |
+| `update_project` | Update project metadata (stage, venue, deadline, status) |
+| `get_stage_history` | Pipeline stage history for a project |
+| `get_scheduling_preferences` | Timezone, working hours, working days, default duration |
+| `update_scheduling_preferences` | Update scheduling prefs |
+| `list_calendars` | All connected calendars (Google + CalDAV/iCloud) |
+| `get_events` | Events from all connected sources; supports date or range |
+| `schedule_task` | Create a linked calendar event and write reference to task |
+| `reschedule_task` | Move an existing scheduled event to a new time |
+
+## Calendar Integration
+
+### Google Calendar
+- OAuth via `google-calendar-auth` (redirect) → `google-calendar-token` (code exchange)
+- Tokens stored in `calendar_sources` row with `type='google'`
+- `calendar.js` calls `google-calendar-token` to get a fresh access token before any API call
+- Events created via Google Calendar API; event ID stored in `tasks.caldav_event_uid`, calendar ID in `tasks.caldav_calendar_id`
+
+### CalDAV / iCloud
+- All CalDAV protocol runs server-side through `caldav-proxy` (CORS bypass)
+- iCloud: uses well-known URL `https://caldav.icloud.com/.well-known/caldav` for discovery; requires app-specific password
+- Credentials stored in `calendar_sources` row with `type='caldav'` or `type='icloud'`
+- Multiple CalDAV sources can coexist; each is fetched in parallel in `loadCalDAVSources()`
+
+### Unified Target Calendar
+- `selectedTargetId` uses composite key format `google:::calId` or `caldav:::sourceId:::calHref`
+- `:::` separator chosen because it can't appear in either calendar IDs or URLs
+- `allCalendars` computed merges Google writables + CalDAV calendars for the "Write events to" dropdown
+- Persisted to `localStorage('rb_cal_target_id')`
+
+### Task–Event Link
+- When a task is scheduled, `caldav_event_uid` (ICS UID) and `caldav_calendar_id` (calendar href or Google cal ID) are written to the task row
+- `scheduledByTaskId` computed in calendar store maps task IDs to their events
+- ICS events include `X-RESEARCHBOARD-TASK-ID` property to link back to tasks
 
 ## App Behaviour
 
-- **Token screen** — user enters Todoist API token once; stored in `localStorage`
-- **No setup on first load** — default stages applied automatically; setup only via Settings → Reconfigure stages
-- **Board** — one column per stage; projects without a matching stage label appear in "Unassigned"
-- **Drag and drop** — Pointer Events on `ProjectCard.vue`; updates stage label in Todoist on drop; `store.cardDragging` flag prevents PTR from firing during drag
-- **Inline status edit** — clicking the status line on a card replaces it with an `<input>`; blur or Enter saves; Escape cancels
-- **Stale indicator** — cards whose Current Status task hasn't been updated in >14 days show `!` badge; On Ice cards are exempt
-- **Project detail** — clicking a card navigates to `/project/:id/` (full-page split panel); back button returns to board
-- **Task list** — shown in project detail right pane; Current Status and Deadlines sections excluded
-- **Quick-add task** — input at bottom of task list in project detail; Enter creates task via API
-- **Pull-to-refresh** — custom composable (`usePullToRefresh.js`); Touch Events, 80px threshold; ignores touch events when `store.cardDragging` is true
-- **Sidebar filters** — click a collaborator or venue in the sidebar to filter cards across all columns; click again to clear
-- **Bottom tabbar** — visible on mobile (< 768px); hidden on desktop where sidebar serves navigation
+- **Board** — one column per stage; projects without a stage appear in "Unassigned"
+- **Drag and drop** — Pointer Events on `ProjectCard.vue`; updates `stage_id` in Supabase on drop; `cardDragging` flag prevents PTR during drag
+- **Inline status edit** — clicking status line on a card opens an `<input>`; blur/Enter saves; Escape cancels
+- **Stale indicator** — cards whose project hasn't been updated in >14 days show `!` badge; On Ice exempt
+- **Energy indicator** — each project has a per-user energy level (0=none, 1=low, 2=high); shown on card
+- **Project detail** — clicking a card navigates to `/project/:id/` (full-page split panel)
+- **Quick-add task** — input at bottom of task list; Enter creates task via Supabase
+- **Completed tasks** — fetched on demand per project; count shown in project detail header
+- **Pull-to-refresh** — custom composable; Touch Events, 80px threshold; ignores events when `cardDragging`
+- **Sidebar filters** — click a collaborator or venue to filter cards across all columns
+- **Real-time** — `board.js` subscribes to Supabase Realtime on tasks and project_members tables after `loadData()`
+- **Triage workflow** — inbox + all tasks flow through `InboxPage` → `TaskDetailPage`/`TaskTriagePage`; tasks get `importance::` and `time::` labels, then can be scheduled
 
 ## Sidebar / Navigation
 
-Both Board and ProjectDetail pages use `AppSidebar.vue`:
+`AppSidebar.vue` is used on Board and ProjectDetail pages (desktop only, `@media (min-width: 768px)`):
+- Nav links: Board, Inbox, Schedule, Reviews, Settings
+- Filters: Collaborators and Venues sections; clicking sets `store.activeFilter`
+- Collapse: `useSidebar.js` singleton; persisted to `localStorage('rb_sidebar_collapsed')`
+  - Collapsed = `width: 0; overflow: hidden`
+  - Floating `sidebar-expand-btn` appears at `position: absolute; left: 12px` inside `.board-main` / `.project-main`
 
-- **Nav items**: Board (active highlight), Reviews, Tasks (disabled), Schedule (disabled)
-- **Filters**: Collaborators and Venues sections (collapsible); clicking filters the board via `store.setFilter(type, value)`
-- **Footer**: Settings button, last-updated timestamp
-- **Collapse**: `useSidebar.js` singleton ref; persisted to `localStorage` as `rb_sidebar_collapsed`
-  - Collapsed = sidebar fully hidden (`width: 0; overflow: hidden`)
-  - A floating `sidebar-expand-btn` appears at `position: absolute; top: ...; left: 12px` inside `.board-main` / `.project-main` (both have `position: relative`)
-  - `BoardPage` and `ProjectDetailPage` both import `useSidebar` to render this button
+`AppTabbar.vue` — bottom tab bar visible on mobile (< 768px): Board, Inbox, Schedule, Settings tabs.
 
-The sidebar is `display: none` on mobile and shown via `@media (min-width: 768px)`.
+## HotCRP Reviews
 
-## HotCRP Reviews (in progress)
+Reviews page (`/reviews/`) shows papers assigned for review from one or more HotCRP instances.
 
-Reviews page (`/reviews/`) shows papers assigned to the user for review, fetched from one or more HotCRP instances. The feature exists but is **not yet working as intended** — treat as work-in-progress.
+- **`stores/reviews.js`** — holds `sites[]`, `proxyUrl`, `results[]`, `loading`, `lastUpdated`
+- **`lib/hotcrp.js`** — `fetchReviewPapers(siteUrl, token, proxyUrl)` + `fetchWhoami`
+- **`pages/HotCRPPage.vue`** — configure CORS proxy URL + add/remove HotCRP sites
+- HotCRP API requires `Authorization: Bearer TOKEN` (query param `api_key` does not work)
+- CORS proxy routes requests through a Cloudflare Worker (or `hotcrp-proxy` Edge Function); token sent as query param, Worker adds the header server-side
 
-### Architecture
-
-- **`stores/reviews.js`** — Pinia setup store; holds `sites[]`, `proxyUrl`, `results[]`, `loading`, `lastUpdated`
-- **`lib/hotcrp.js`** — `fetchReviewPapers(siteUrl, token, proxyUrl)` and `fetchWhoami(siteUrl, token, proxyUrl)` — internal `_hotcrpGet` helper handles URL/auth construction
-- **`pages/HotCRPPage.vue`** — configure CORS proxy URL and add/remove HotCRP sites
-- **`pages/ReviewsPage.vue`** — lists papers per site with review status badge (Not started / In progress / Submitted)
-
-### Authentication
-
-HotCRP API requires `Authorization: Bearer TOKEN` header (confirmed working). The `api_key` query param does **not** work — it returns `{"ok": false, "status_code": 401}`.
-
-### CORS Proxy
-
-Browsers block direct HotCRP requests. The app routes through a configurable Cloudflare Worker proxy.
-
-**Why not send the Authorization header from the browser directly?** Custom request headers trigger a CORS preflight (OPTIONS) request. To avoid this, the app passes the token as a query param to the Worker, and the Worker adds the `Authorization: Bearer` header server-side when calling HotCRP.
-
-URL construction:
-```js
-// With proxy: token passed as query param, Worker adds Authorization header
-`${proxyUrl}?url=${encodeURIComponent(hotcrpUrl)}&token=${encodeURIComponent(token)}`
-// Direct (no proxy): Authorization header sent directly
-fetch(hotcrpUrl, { headers: { 'Authorization': `Bearer ${token}` } })
-```
-
-**Cloudflare Worker code** (the Worker the proxy URL points to):
-```js
-export default {
-  async fetch(request) {
-    const { searchParams } = new URL(request.url)
-    const target = searchParams.get('url')
-    const token = searchParams.get('token')
-
-    if (!target) return new Response('Missing url param', { status: 400 })
-
-    if (request.method === 'OPTIONS') {
-      return new Response(null, {
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET',
-          'Access-Control-Allow-Headers': '*',
-        }
-      })
-    }
-
-    const headers = {}
-    if (token) headers['Authorization'] = `Bearer ${token}`
-
-    const response = await fetch(target, { headers })
-    const body = await response.text()
-
-    return new Response(body, {
-      status: response.status,
-      headers: {
-        'Content-Type': response.headers.get('Content-Type') || 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      }
-    })
-  }
-}
-```
-
-### Site/Proxy Storage
-
-Sites are stored as `[{id, url, token, name}]` in `localStorage` under `rb_hotcrp_sites`. Proxy URL under `rb_hotcrp_proxy`. The `proxyDraft` input in HotCRPPage is kept in sync with the store via a `watch`.
+HotCRP sites stored as `[{id, url, token, name}]` in `localStorage('rb_hotcrp_sites')`. Proxy URL in `localStorage('rb_hotcrp_proxy')`.
 
 ## Theme
 
-Three modes: **auto** (CSS media query), **light**, **dark**. Stored in `localStorage` as `rb_theme`.
+Three modes: **auto**, **light**, **dark**. Stored in `localStorage('rb_theme')`.
 - Anti-FOUC inline script in `index.html` sets `data-theme` before Vue mounts
-- `useTheme.js` composable handles cycling and OS change events; called in `App.vue` for app-lifetime listener
-- Theme toggle lives in `SettingsSheet.vue` (not in a navbar)
-- CSS: `:root` = light-first tokens; `html[data-theme="dark"]` overrides for dark mode; F7 CSS vars overridden via same selectors
+- `useTheme.js` handles cycling and OS change events; called in `App.vue`
+- CSS: `:root` = light-first tokens; `html[data-theme="dark"]` overrides
+- F7 dark mode: `<html>` gets both `data-theme="dark"` and `.dark` class
+
+Anti-FOUC script: `(function(){var t=localStorage.getItem('rb_theme')||'auto';document.documentElement.dataset.theme=t==='dark'||t==='auto'&&matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'})();`
+
+To get its SHA-256 (needed for CSP): `printf '%s' '<script content>' | openssl dgst -sha256 -binary | openssl base64`
 
 ## PWA
 
-- `manifest.json`: `"display": "standalone"`, `theme_color: "#F5F5F7"` (light) / icons from Stitch design
-- `apple-mobile-web-app-status-bar-style`: `"black-translucent"` — status bar overlays content
-- Safe area insets: `env(safe-area-inset-top)` added to `.sidebar-brand`, `.board-main`, `.project-meta`, `.project-tasks` padding
-- `viewport-fit=cover` in viewport meta tag (required for safe area insets to work)
+- App name: **researchflo** (both `name` and `short_name` in manifest)
+- `vite.config.js` generates manifest; icons split into separate `"any"` and `"maskable"` entries (combined `"any maskable"` causes macOS dock to apply safe-zone white border)
+- `display: standalone`, `display_override: ['window-controls-overlay']`
+- `theme_color: '#F5F5F7'`, `background_color: '#F5F5F7'`
+- Safe area insets: `env(safe-area-inset-top)` on `.sidebar-brand`, `.board-main`, `.project-meta`, etc.
+- `viewport-fit=cover` required for safe area insets
 
-## Accessibility (WCAG 2.1 AA target)
+## Security
 
-- **Focus management** — F7 Sheet has built-in focus trap; opener element focus restored on close via F7's sheet close events
-- **Dialog semantics** — `role="dialog" aria-modal="true" aria-labelledby` on `.modal-body` inside each sheet
-- **Live regions** — `role="status"` on board-loading overlay
-- **List semantics** — `role="list"` on `.col-body`; `role="listitem"` on cards
-- **Interactive elements** — all card action elements have `tabindex="0"` and keydown handlers
-- **Reduced motion** — `@media (prefers-reduced-motion: reduce)` collapses all durations to 0.01ms
+CSP via `<meta http-equiv="Content-Security-Policy">` in `index.html`:
+- `script-src 'self' 'sha256-...'` — hash covers the inline anti-FOUC script
+- `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`
+- `font-src 'self' data: https://fonts.gstatic.com`
+- `connect-src https://oqqevpkeqcbkqrgabpkc.supabase.co https://accounts.google.com https:`
 
 ## CSS Notes
 
-- **Design tokens**: light-first in `:root`; dark overrides in `html[data-theme="dark"]`. Key tokens: `--bg`, `--bg-surface`, `--bg-sidebar`, `--text`, `--text2`, `--text3`, `--border`, `--accent`, `--font`, `--stage-0` … `--stage-5`
-- **Typography**: `--font` = Inter + system stack (all UI); IBM Plex Mono (`--font-code`) only used for `.kbd`; Playfair Display removed
-- **F7 `.card` conflict**: F7's CSS applies `margin: 16px` to all `.card` elements globally. Our `.card` rule must include `margin: 0` to override it, otherwise cards are misaligned and over-spaced.
-- **Scroll-snap + padding**: `.board` uses `scroll-snap-type: x mandatory`. When `padding-left` is set on a scroll-snap container, scroll snap advances the scroll position to snap the first item to the viewport edge — scrolling the padding off-screen. Fix: always set `scroll-padding-left` equal to `padding-left` on `.board`. Currently `padding: 24px; scroll-padding: 24px;` base, with `padding-left: 48px; scroll-padding-left: 48px` on `@media (min-width: 768px)`.
-- **Media query placement**: CSS media query overrides for `.board` must come *after* the base `.board { padding }` rule in the file, or the base rule wins the cascade (same specificity, later position wins).
-- **Board left padding**: Extra `padding-left: 48px` on desktop (via `@media (min-width: 768px)`) creates breathing room between the sidebar and the first column. Requires matching `scroll-padding-left`.
-- **`@keyframes ptr-spin`**: combines both `translateX(-50%)` and `rotate(360deg)` — do not split into two transforms (the global `.spin` only rotates, which would break the centering).
-- **`.board-page .page-content`**: `padding: 0 !important` — F7's default page-content padding is fully zeroed; safe area is handled manually via `env(safe-area-inset-top)` on `.board-main`.
-- **Column scrollbars**: hidden via `scrollbar-width: none` + `.col-body::-webkit-scrollbar { display: none }`. Content still scrolls.
-- **F7 dark mode**: `<html>` gets both `data-theme="dark"` and `.dark` class — `useTheme.js` and `main.js` both toggle the class.
+- **Design tokens**: `tokens.css` — light-first in `:root`; dark overrides in `html[data-theme="dark"]`. Key tokens: `--bg`, `--bg-surface`, `--bg-sidebar`, `--text`, `--text2`, `--text3`, `--border`, `--accent`, `--font`, `--stage-0` … `--stage-5`
+- **Typography**: `--font` = Inter + system stack; IBM Plex Mono (`--font-code`) only for `.kbd`
+- **F7 `.card` conflict**: F7 applies `margin: 16px` to all `.card` globally; override with `margin: 0`
+- **Scroll-snap + padding**: `.board` uses `scroll-snap-type: x mandatory`; always set `scroll-padding-left` equal to `padding-left` to prevent first column being scrolled off
+- **Media query placement**: CSS overrides for `.board` must come *after* the base rule in the file
+- **`@keyframes ptr-spin`**: combines `translateX(-50%)` and `rotate(360deg)` — do not split
+- **`.board-page .page-content`**: `padding: 0 !important`; safe area handled manually
+- **Column scrollbars**: hidden via `scrollbar-width: none` + `::-webkit-scrollbar { display: none }`
 
 ## Service Worker
 
-Managed by `vite-plugin-pwa` in `generateSW` mode. No manual cache name bumping needed — Vite's hashed filenames + Workbox precache handles cache invalidation automatically. Todoist API calls use `NetworkFirst` strategy.
-
-## Intended Workflow
-
-The app is used as a **pipeline overview** across MacBook and tablet — not a day-to-day task manager. Key use cases:
-
-- **Passive overview** — keep all research projects in sight at a glance
-- **Status meetings** — walk through project states, quickly capture tasks mid-conversation
-- **Sprint planning** — decide which projects are in focus for the week
-
-Task scheduling and calendar management stay outside this app (handled via Claude + Google Calendar).
-
-## Planned Features
-
-These were discussed and deferred pending real usage. Implement when the user asks.
-
-### Project card detail review (medium effort)
-Audit what information is shown on `ProjectCard.vue` and how it's presented. Consider: deadline prominence, collaborator display, stale indicator, status text truncation. Goal: make each card scannable at a glance without opening the detail page.
-
-### Drag and drop between columns (medium effort)
-The existing Pointer Events DnD in `ProjectCard.vue` moves projects between stages. Revisit the implementation: check that it works reliably on touch (tablet), handles edge cases (drop on column header vs body), and gives good visual feedback during drag.
-
-### Project detail page usability (medium effort)
-`ProjectDetailPage.vue` is functional but not polished. Improvements to consider: better layout for the metadata pane, richer task list (due dates, priority), faster stage switching, and making the page feel less like a form and more like a workspace.
-
-### Settings page (medium effort)
-Replace or supplement `SettingsSheet.vue` with a dedicated full-page settings screen. Should cover: API token management, theme selection, stage configuration (currently behind "Reconfigure stages"), HotCRP proxy + sites, and any future preferences.
-
-### HotCRP Reviews (revisit)
-The Reviews page and HotCRP integration exist but are not working as intended. Needs rethinking before further work.
-
-### Sprint focus (medium effort)
-Mark projects as "in focus" via a `sprint::focus` Todoist label. Toggle from the project detail page. Visual treatment TBD. Clear all focus labels at sprint start.
-
-### Ideas column (zero effort — config only)
-Add `stage::idea` to stage configuration. No code change needed.
-
-### Quick-add project (medium effort)
-A "+" action that creates a new sub-project under "Research". Requires `POST /projects` with `parent_id` (Research root ID is already found in `displayProjects` computed).
-
-### Global quick-add task (small effort)
-Add a task to any project from anywhere without opening the detail page.
-
-### Inbox capture (small–medium effort)
-Surface Todoist's Inbox (tasks with no project assigned) in the task triage page. The triage page currently only shows tasks from Research sub-projects; showing inbox tasks alongside them closes the GTD capture loop — you can quickly dump tasks into Todoist from anywhere, then come here to triage and optionally reassign them to a project. Implementation: fetch tasks without a `project_id` filter (or identify Todoist's built-in Inbox project ID), show them as a special "Inbox" entry in the sidebar project list, and allow reassigning a task to a Research sub-project from the detail panel.
-
-### Urgent/high-priority task indicators (small–medium effort)
-Surface urgent or high-priority tasks on the project card and/or in the project detail task list. Todoist tasks have a `priority` field (1=normal, 2=medium, 3=high, 4=urgent). Options: a badge or dot on the card when any task has priority ≥ 3, color-coded priority indicators on individual task rows in the detail view, or both.
-
-### Task triage workflow improvements (small–medium effort each)
-The intended workflow is: triage all tasks (set urgency + time), then execute by quadrant — quick tasks first, then schedule important/non-urgent ones, then work through urgent ones. Four improvements to support this flow:
-
-1. **Auto-advance after completing** — when a task is marked done, automatically select the next task in the filtered list. Eliminates the click-back-to-list step and keeps the execution phase moving forward.
-2. **Keyboard navigation** — `J`/`K` or arrow keys to move between tasks in the list without touching the mouse. Useful on desktop during both triage and execution phases.
-3. **"Not yet triaged" filter** — a new tab showing tasks with no urgency or time estimate set. Gives a clear queue to work through during triage; when it's empty, triage is done.
-4. **Visual triage status in the list** — style tasks differently based on whether they've been triaged (have urgency/time set) vs. not. Makes triage progress visible at a glance without opening each task.
+Managed by `vite-plugin-pwa` in `generateSW` mode. Workbox precaches hashed assets; Supabase API calls use `NetworkFirst` strategy.
 
 ## Key localStorage Keys
 
-| Key                      | Value                                   |
-|--------------------------|-----------------------------------------|
-| `rb_token`               | Todoist API token                       |
-| `rb_stages`              | JSON array of `{name, label}`           |
-| `rb_theme`               | `"auto"` / `"light"` / `"dark"`        |
-| `rb_sidebar_collapsed`   | `"1"` (collapsed) or absent/`"0"`      |
-| `rb_hotcrp_sites`        | JSON array of `{id, url, token, name}`  |
-| `rb_hotcrp_proxy`        | CORS proxy URL string                   |
+| Key | Value |
+|---|---|
+| `rb_theme` | `"auto"` / `"light"` / `"dark"` |
+| `rb_stages` | JSON array of stage objects (cache; source of truth is Supabase `stages` table) |
+| `rb_sidebar_collapsed` | `"1"` (collapsed) or absent |
+| `rb_hotcrp_sites` | JSON array of `{id, url, token, name}` |
+| `rb_hotcrp_proxy` | CORS proxy URL string |
+| `rb_gcal_calendar_id` | Selected Google Calendar ID (legacy; superseded by `rb_cal_target_id`) |
+| `rb_cal_target_id` | Composite target calendar ID: `google:::calId` or `caldav:::sourceId:::calHref` |
+
+## Intended Workflow
+
+The app is a **pipeline overview** used on MacBook and tablet. Key use cases:
+- **Passive overview** — all research projects at a glance
+- **Status meetings** — walk through project states, capture tasks mid-conversation (via MCP or app)
+- **Sprint planning** — decide which projects are in focus; set energy levels
+- **Task scheduling** — triage inbox tasks (urgency + time estimate), then drag onto the weekly calendar
+
+The MCP server connects to Claude Desktop/Claude.ai, enabling AI-assisted project management: list tasks, schedule them on the calendar, update project status — all from a Claude conversation.
+
+## Planned Features
+
+These are deferred. Implement when the user asks.
+
+### Task triage improvements (small–medium effort each)
+1. **Auto-advance after completing** — when a task is marked done, auto-select the next in the filtered list
+2. **Keyboard navigation** — J/K or arrows to move between tasks without the mouse
+3. **"Not yet triaged" filter** — tab showing tasks with no urgency/time estimate set
+4. **Visual triage status** — style tasks differently based on whether they've been triaged
+
+### Drag-to-schedule reliability (medium effort)
+iPad drag-to-schedule in `SchedulePage` needs reliability work; edge cases around touch handling and drop zones.
+
+### Project card detail review (small effort)
+Audit information shown on `ProjectCard.vue`: deadline prominence, collaborator display, status text truncation. Goal: scannable at a glance.
+
+### HotCRP Reviews (revisit)
+Feature exists but is not working as intended. Needs rethinking of the auth/proxy approach before further work.
+
+### Meeting log (medium effort)
+New `meetings` table (project_id, title, held_at, notes, attendees[]). New tab in `ProjectDetailPage.vue`.
+
+### Sprint focus (small effort)
+Mark projects as "in focus" (toggle energy from detail page). Visual treatment TBD.
+
+### Quick-add project (medium effort)
+"+" action on the board that creates a new project. `NewProjectPage.vue` exists; needs board integration.
+
+### Resources section (medium effort)
+New `resources` table (project_id, title, url). Supabase Storage for PDF uploads.
