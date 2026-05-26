@@ -172,37 +172,33 @@ const TOOLS = [
     },
   },
   {
-    name: 'add_event',
-    description: 'Create a new Google Calendar event. Use list_calendars to find the right calendar_id. For timed events provide an ISO 8601 datetime and always include timezone; for all-day events use YYYY-MM-DD dates.',
+    name: 'schedule_task',
+    description: 'Schedule a task by creating a linked Google Calendar event, then writing the event reference and scheduled time back to the task. Use list_tasks to get task_id. Use list_calendars + get_events to check for conflicts first.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
-      required: ['summary', 'start', 'end'],
+      required: ['task_id', 'start', 'duration_minutes'],
       properties: {
-        summary: { type: 'string', description: 'Event title.' },
-        start: { type: 'string', description: 'Start as ISO 8601 datetime (e.g. "2026-05-26T14:00:00") for timed events, or YYYY-MM-DD for all-day.' },
-        end: { type: 'string', description: 'End as ISO 8601 datetime or YYYY-MM-DD. For all-day events this is the exclusive end date (day after the last day).' },
-        description: { type: 'string', description: 'Event description or notes.' },
-        timezone: { type: 'string', description: 'IANA timezone (e.g. "America/New_York", "Europe/Berlin"). Required for timed events; defaults to UTC.' },
+        task_id: { type: 'string', description: 'UUID from list_tasks.' },
+        start: { type: 'string', description: 'Start datetime in ISO 8601 format (e.g. "2026-05-26T14:00:00"). Always supply timezone.' },
+        duration_minutes: { type: 'number', description: 'Duration in minutes (e.g. 60 for 1 hour, 90 for 90 minutes).' },
+        timezone: { type: 'string', description: 'IANA timezone (e.g. "America/New_York", "Europe/Berlin"). Defaults to UTC.' },
         calendar_id: { type: 'string', description: 'Target calendar ID from list_calendars. Defaults to the user\'s configured write calendar or "primary".' },
       },
     },
   },
   {
-    name: 'update_event',
-    description: 'Update an existing Google Calendar event. Use get_events to find event_id and calendar_id. Only provided fields are changed.',
+    name: 'reschedule_task',
+    description: 'Move an already-scheduled task to a new time. Reads the existing event reference from the task, patches the calendar event, and updates the task\'s scheduled time. No calendar_id needed — it is read from the task. Use list_tasks to get task_id.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
-      required: ['event_id', 'calendar_id'],
+      required: ['task_id', 'start', 'duration_minutes'],
       properties: {
-        event_id: { type: 'string', description: 'Google Calendar event ID from get_events.' },
-        calendar_id: { type: 'string', description: 'Calendar ID the event belongs to, from get_events or list_calendars.' },
-        summary: { type: 'string', description: 'New event title.' },
-        start: { type: 'string', description: 'New start as ISO 8601 datetime or YYYY-MM-DD.' },
-        end: { type: 'string', description: 'New end as ISO 8601 datetime or YYYY-MM-DD.' },
-        description: { type: 'string', description: 'New event description.' },
-        timezone: { type: 'string', description: 'IANA timezone for start/end if timed (e.g. "America/New_York"). Defaults to UTC.' },
+        task_id: { type: 'string', description: 'UUID from list_tasks. The task must already have a scheduled event (use schedule_task if not).' },
+        start: { type: 'string', description: 'New start datetime in ISO 8601 format (e.g. "2026-05-27T10:00:00").' },
+        duration_minutes: { type: 'number', description: 'New duration in minutes.' },
+        timezone: { type: 'string', description: 'IANA timezone (e.g. "America/New_York"). Defaults to UTC.' },
       },
     },
   },
@@ -605,14 +601,28 @@ async function callTool(name: string, args: any, userId: string, admin: Admin): 
       return toolOk(JSON.stringify(out, null, 2))
     }
 
-    case 'add_event': {
+    case 'schedule_task': {
       const { token, error: tokenError } = await _ensureGCalToken(userId, admin)
       if (!token) return toolErr(tokenError!)
 
-      const { summary, start, end, description, timezone, calendar_id } = args
-      if (!summary?.toString().trim()) return toolErr('summary is required')
+      const { task_id, start, duration_minutes, timezone, calendar_id } = args
+      if (!task_id) return toolErr('task_id is required')
       if (!start) return toolErr('start is required')
-      if (!end) return toolErr('end is required')
+      if (!duration_minutes) return toolErr('duration_minutes is required')
+
+      // Get task + project name for event description
+      const { data: task } = await admin
+        .from('tasks')
+        .select('id, content, description, project_id')
+        .eq('id', task_id)
+        .single()
+      if (!task) return toolErr('Task not found')
+
+      let projectName = ''
+      if (task.project_id) {
+        const { data: proj } = await admin.from('projects').select('name').eq('id', task.project_id).single()
+        projectName = (proj as any)?.name ?? ''
+      }
 
       // Resolve target calendar: explicit arg → stored write-target → 'primary'
       let targetCalId = calendar_id as string | undefined
@@ -627,11 +637,24 @@ async function callTool(name: string, args: any, userId: string, admin: Admin): 
       }
 
       const tz = (timezone as string) ?? 'UTC'
-      const isAllDay = !(start as string).includes('T')
-      const body: Record<string, unknown> = { summary: summary.toString().trim() }
-      if (description) body.description = description
-      body.start = isAllDay ? { date: start } : { dateTime: start, timeZone: tz }
-      body.end   = isAllDay ? { date: end }   : { dateTime: end,   timeZone: tz }
+      const startDate = new Date(start as string)
+      const endDate = new Date(startDate.getTime() + (duration_minutes as number) * 60_000)
+
+      const descParts: string[] = []
+      if (projectName) descParts.push(`Project: ${projectName}`)
+      const notes = ((task.description ?? '') as string)
+        .split('\n')
+        .filter((l: string) => !l.startsWith('📅 Scheduled:') && !l.startsWith('📅 GCal:'))
+        .join('\n').trim()
+      if (notes) descParts.push(notes)
+
+      const body = {
+        summary: task.content,
+        description: descParts.join('\n\n'),
+        start: { dateTime: startDate.toISOString(), timeZone: tz },
+        end:   { dateTime: endDate.toISOString(),   timeZone: tz },
+        extendedProperties: { private: { todoist_task_id: String(task.id) } },
+      }
 
       const res = await fetch(
         `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(targetCalId!)}/events`,
@@ -646,57 +669,75 @@ async function callTool(name: string, args: any, userId: string, admin: Admin): 
         return toolErr(`Google Calendar error: ${err?.error?.message ?? res.status}`)
       }
       const event = await res.json()
+
+      // Write event reference + scheduled time back to task_schedule
+      await admin.from('task_schedule').upsert({
+        user_id: userId,
+        task_id,
+        caldav_event_uid: event.id,
+        caldav_calendar_id: targetCalId,
+        scheduled_at: startDate.toISOString(),
+      }, { onConflict: 'user_id,task_id' })
+
       return toolOk(JSON.stringify({
-        id: event.id,
-        summary: event.summary,
-        start: event.start?.dateTime ?? event.start?.date,
-        end: event.end?.dateTime ?? event.end?.date,
+        task_id,
+        event_id: event.id,
         calendar_id: targetCalId,
+        scheduled_at: startDate.toISOString(),
         html_link: event.htmlLink,
       }, null, 2))
     }
 
-    case 'update_event': {
+    case 'reschedule_task': {
       const { token, error: tokenError } = await _ensureGCalToken(userId, admin)
       if (!token) return toolErr(tokenError!)
 
-      const { event_id, calendar_id, summary, start, end, description, timezone } = args
-      if (!event_id) return toolErr('event_id is required')
-      if (!calendar_id) return toolErr('calendar_id is required')
+      const { task_id, start, duration_minutes, timezone } = args
+      if (!task_id) return toolErr('task_id is required')
+      if (!start) return toolErr('start is required')
+      if (!duration_minutes) return toolErr('duration_minutes is required')
+
+      // Read existing event reference from task_schedule
+      const { data: schedule } = await admin
+        .from('task_schedule')
+        .select('caldav_event_uid, caldav_calendar_id')
+        .eq('user_id', userId)
+        .eq('task_id', task_id)
+        .single()
+      if (!schedule?.caldav_event_uid) {
+        return toolErr('Task has no scheduled event. Use schedule_task to create one first.')
+      }
 
       const tz = (timezone as string) ?? 'UTC'
-      const patch: Record<string, unknown> = {}
-      if (summary !== undefined) patch.summary = summary.toString().trim()
-      if (description !== undefined) patch.description = description
-      if (start !== undefined) {
-        const isAllDay = !(start as string).includes('T')
-        patch.start = isAllDay ? { date: start } : { dateTime: start, timeZone: tz }
-      }
-      if (end !== undefined) {
-        const isAllDay = !(end as string).includes('T')
-        patch.end = isAllDay ? { date: end } : { dateTime: end, timeZone: tz }
-      }
-      if (Object.keys(patch).length === 0) return toolErr('No fields to update')
+      const startDate = new Date(start as string)
+      const endDate = new Date(startDate.getTime() + (duration_minutes as number) * 60_000)
 
       const res = await fetch(
-        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendar_id as string)}/events/${encodeURIComponent(event_id as string)}`,
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(schedule.caldav_calendar_id)}/events/${encodeURIComponent(schedule.caldav_event_uid)}`,
         {
           method: 'PATCH',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify(patch),
+          body: JSON.stringify({
+            start: { dateTime: startDate.toISOString(), timeZone: tz },
+            end:   { dateTime: endDate.toISOString(),   timeZone: tz },
+          }),
         }
       )
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
         return toolErr(`Google Calendar error: ${err?.error?.message ?? res.status}`)
       }
-      const event = await res.json()
+
+      await admin.from('task_schedule')
+        .update({ scheduled_at: startDate.toISOString() })
+        .eq('user_id', userId)
+        .eq('task_id', task_id)
+
       return toolOk(JSON.stringify({
-        id: event.id,
-        summary: event.summary,
-        start: event.start?.dateTime ?? event.start?.date,
-        end: event.end?.dateTime ?? event.end?.date,
-        html_link: event.htmlLink,
+        task_id,
+        event_id: schedule.caldav_event_uid,
+        calendar_id: schedule.caldav_calendar_id,
+        scheduled_at: startDate.toISOString(),
       }, null, 2))
     }
 
@@ -751,14 +792,14 @@ Deno.serve(async (req) => {
 TOOL CHAINING (call in this order):
 - Projects: list_projects → update_project / add_task / get_stage_history
 - Tasks: list_projects → list_tasks → update_task / mark_task_complete
-- Calendar: list_calendars → get_events → update_event
-- New event: list_calendars → add_event
+- Calendar (read): list_calendars → get_events
+- Schedule task: list_tasks → (list_calendars) → (get_events, check conflicts) → schedule_task
+- Reschedule task: list_tasks → reschedule_task
 
 ID SOURCES:
 - project_id → list_projects
 - task_id → list_tasks
 - calendar_id → list_calendars (or from get_events results)
-- event_id → get_events
 
 FORMATS:
 - Dates: YYYY-MM-DD (e.g. "2026-05-26")
@@ -781,7 +822,11 @@ Schedule tasks for the week:
   1. list_tasks — find open tasks to schedule
   2. list_calendars — resolve calendar_id once
   3. get_events — check existing commitments for the target days
-  4. add_event (repeat) — block time for each task
+  4. schedule_task (repeat) — one call per task; creates the calendar event and writes the reference back to the task
+
+Reschedule a task:
+  1. list_tasks — get task_id
+  2. reschedule_task — no calendar lookup needed, reads event reference from the task
 
 Quick project status update:
   1. list_projects — get project_id and current state
