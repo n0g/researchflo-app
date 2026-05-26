@@ -334,33 +334,3 @@ The app is a **pipeline overview** used on MacBook and tablet. Key use cases:
 
 The MCP server connects to Claude Desktop/Claude.ai, enabling AI-assisted project management: list tasks, schedule them on the calendar, update project status — all from a Claude conversation.
 
-## Planned Features
-
-These are deferred. Implement when the user asks.
-
-### Task triage improvements (small–medium effort each)
-1. **Auto-advance after completing** — when a task is marked done, auto-select the next in the filtered list
-2. **Keyboard navigation** — J/K or arrows to move between tasks without the mouse
-3. **"Not yet triaged" filter** — tab showing tasks with no urgency/time estimate set
-4. **Visual triage status** — style tasks differently based on whether they've been triaged
-
-### Drag-to-schedule reliability (medium effort)
-iPad drag-to-schedule in `SchedulePage` needs reliability work; edge cases around touch handling and drop zones.
-
-### Project card detail review (small effort)
-Audit information shown on `ProjectCard.vue`: deadline prominence, collaborator display, status text truncation. Goal: scannable at a glance.
-
-### HotCRP Reviews (revisit)
-Feature exists but is not working as intended. Needs rethinking of the auth/proxy approach before further work.
-
-### Meeting log (medium effort)
-New `meetings` table (project_id, title, held_at, notes, attendees[]). New tab in `ProjectDetailPage.vue`.
-
-### Sprint focus (small effort)
-Mark projects as "in focus" (toggle energy from detail page). Visual treatment TBD.
-
-### Quick-add project (medium effort)
-"+" action on the board that creates a new project. `NewProjectPage.vue` exists; needs board integration.
-
-### Resources section (medium effort)
-New `resources` table (project_id, title, url). Supabase Storage for PDF uploads.
