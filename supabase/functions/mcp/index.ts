@@ -1,5 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
+const GOOGLE_CLIENT_ID = '809750411186-1315ibr7ag630sbdkd42kt2cojlflqr6.apps.googleusercontent.com'
+
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, content-type, mcp-session-id',
@@ -132,6 +134,52 @@ const TOOLS = [
     },
   },
   {
+    name: 'get_events',
+    description: 'Fetch Google Calendar events for a single day or a date range (max 2 weeks). Returns events from the primary calendar by default.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        date: { type: 'string', description: 'Single day in YYYY-MM-DD format (alternative to start_date/end_date)' },
+        start_date: { type: 'string', description: 'Start of range in YYYY-MM-DD format' },
+        end_date: { type: 'string', description: 'End of range in YYYY-MM-DD format (inclusive, max 14 days from start_date)' },
+        calendar_id: { type: 'string', description: 'Calendar ID to fetch from (default: "primary")' },
+      },
+    },
+  },
+  {
+    name: 'add_event',
+    description: 'Create a new Google Calendar event. Use ISO 8601 datetime strings for timed events (e.g. "2026-05-26T14:00:00") or YYYY-MM-DD for all-day events.',
+    inputSchema: {
+      type: 'object',
+      required: ['summary', 'start', 'end'],
+      properties: {
+        summary: { type: 'string', description: 'Event title' },
+        start: { type: 'string', description: 'Start as ISO 8601 datetime or YYYY-MM-DD for all-day' },
+        end: { type: 'string', description: 'End as ISO 8601 datetime or YYYY-MM-DD for all-day' },
+        description: { type: 'string', description: 'Event description / notes' },
+        timezone: { type: 'string', description: 'IANA timezone (e.g. "America/New_York"). Defaults to UTC.' },
+        calendar_id: { type: 'string', description: 'Target calendar ID (defaults to the user\'s configured write calendar or "primary")' },
+      },
+    },
+  },
+  {
+    name: 'update_event',
+    description: 'Update an existing Google Calendar event. Only provided fields are changed.',
+    inputSchema: {
+      type: 'object',
+      required: ['event_id', 'calendar_id'],
+      properties: {
+        event_id: { type: 'string', description: 'Google Calendar event ID' },
+        calendar_id: { type: 'string', description: 'Calendar ID the event belongs to' },
+        summary: { type: 'string', description: 'New event title' },
+        start: { type: 'string', description: 'New start as ISO 8601 datetime or YYYY-MM-DD' },
+        end: { type: 'string', description: 'New end as ISO 8601 datetime or YYYY-MM-DD' },
+        description: { type: 'string', description: 'New description' },
+        timezone: { type: 'string', description: 'IANA timezone for start/end if timed. Defaults to UTC.' },
+      },
+    },
+  },
+  {
     name: 'get_stage_history',
     description: 'Get the pipeline stage history for a project, showing how long it spent (or has spent) in each stage. Useful for identifying stuck projects.',
     inputSchema: {
@@ -146,6 +194,42 @@ const TOOLS = [
 
 // deno-lint-ignore no-explicit-any
 type Admin = ReturnType<typeof createClient>
+
+async function _ensureGCalToken(userId: string, admin: Admin): Promise<{ token: string | null; error?: string }> {
+  const { data: source } = await admin
+    .from('calendar_sources')
+    .select('id, access_token, refresh_token, token_expires_at')
+    .eq('user_id', userId)
+    .eq('type', 'google')
+    .maybeSingle()
+
+  if (!source?.refresh_token) return { token: null, error: 'Google Calendar not connected for this user' }
+
+  const now = Date.now()
+  if (source.access_token && source.token_expires_at > now + 5 * 60 * 1000) {
+    return { token: source.access_token }
+  }
+
+  const refreshRes = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: GOOGLE_CLIENT_ID,
+      client_secret: Deno.env.get('GOOGLE_CLIENT_SECRET')!,
+      refresh_token: source.refresh_token,
+      grant_type: 'refresh_token',
+    }),
+  })
+  if (!refreshRes.ok) return { token: null, error: 'Failed to refresh Google Calendar token' }
+
+  const refreshed = await refreshRes.json()
+  await admin.from('calendar_sources').update({
+    access_token: refreshed.access_token,
+    token_expires_at: now + refreshed.expires_in * 1000,
+  }).eq('id', source.id)
+
+  return { token: refreshed.access_token }
+}
 
 async function resolveStageId(admin: Admin, stageName: string): Promise<{ id: string | null; error?: string }> {
   const { data: stages } = await admin.from('stages').select('id, name').order('sort_order')
@@ -428,6 +512,151 @@ async function callTool(name: string, args: any, userId: string, admin: Admin): 
         }
       })
       return toolOk(JSON.stringify(out, null, 2))
+    }
+
+    case 'get_events': {
+      const { token, error: tokenError } = await _ensureGCalToken(userId, admin)
+      if (!token) return toolErr(tokenError!)
+
+      let timeMin: Date, timeMax: Date
+      if (args.date) {
+        timeMin = new Date(`${args.date}T00:00:00`)
+        timeMax = new Date(`${args.date}T23:59:59`)
+      } else if (args.start_date && args.end_date) {
+        timeMin = new Date(`${args.start_date}T00:00:00`)
+        timeMax = new Date(`${args.end_date}T23:59:59`)
+        if (timeMax.getTime() - timeMin.getTime() > 14 * 24 * 60 * 60 * 1000) {
+          return toolErr('Date range exceeds maximum of 2 weeks')
+        }
+      } else {
+        return toolErr('Provide either "date" or both "start_date" and "end_date"')
+      }
+
+      const calId = encodeURIComponent((args.calendar_id as string) ?? 'primary')
+      const params = new URLSearchParams({
+        timeMin: timeMin.toISOString(),
+        timeMax: timeMax.toISOString(),
+        singleEvents: 'true',
+        orderBy: 'startTime',
+        maxResults: '250',
+      })
+      const res = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/${calId}/events?${params}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        return toolErr(`Google Calendar error: ${err?.error?.message ?? res.status}`)
+      }
+      const data = await res.json()
+      // deno-lint-ignore no-explicit-any
+      const out = (data.items ?? []).map((ev: any) => ({
+        id: ev.id,
+        summary: ev.summary ?? '(No title)',
+        start: ev.start?.dateTime ?? ev.start?.date,
+        end: ev.end?.dateTime ?? ev.end?.date,
+        description: ev.description ?? null,
+        location: ev.location ?? null,
+        calendar_id: args.calendar_id ?? 'primary',
+        html_link: ev.htmlLink ?? null,
+        status: ev.status ?? null,
+      }))
+      return toolOk(JSON.stringify(out, null, 2))
+    }
+
+    case 'add_event': {
+      const { token, error: tokenError } = await _ensureGCalToken(userId, admin)
+      if (!token) return toolErr(tokenError!)
+
+      const { summary, start, end, description, timezone, calendar_id } = args
+      if (!summary?.toString().trim()) return toolErr('summary is required')
+      if (!start) return toolErr('start is required')
+      if (!end) return toolErr('end is required')
+
+      // Resolve target calendar: explicit arg → stored write-target → 'primary'
+      let targetCalId = calendar_id as string | undefined
+      if (!targetCalId) {
+        const { data: source } = await admin
+          .from('calendar_sources')
+          .select('calendar_id')
+          .eq('user_id', userId)
+          .eq('type', 'google')
+          .maybeSingle()
+        targetCalId = (source as any)?.calendar_id ?? 'primary'
+      }
+
+      const tz = (timezone as string) ?? 'UTC'
+      const isAllDay = !(start as string).includes('T')
+      const body: Record<string, unknown> = { summary: summary.toString().trim() }
+      if (description) body.description = description
+      body.start = isAllDay ? { date: start } : { dateTime: start, timeZone: tz }
+      body.end   = isAllDay ? { date: end }   : { dateTime: end,   timeZone: tz }
+
+      const res = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(targetCalId!)}/events`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        }
+      )
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        return toolErr(`Google Calendar error: ${err?.error?.message ?? res.status}`)
+      }
+      const event = await res.json()
+      return toolOk(JSON.stringify({
+        id: event.id,
+        summary: event.summary,
+        start: event.start?.dateTime ?? event.start?.date,
+        end: event.end?.dateTime ?? event.end?.date,
+        calendar_id: targetCalId,
+        html_link: event.htmlLink,
+      }, null, 2))
+    }
+
+    case 'update_event': {
+      const { token, error: tokenError } = await _ensureGCalToken(userId, admin)
+      if (!token) return toolErr(tokenError!)
+
+      const { event_id, calendar_id, summary, start, end, description, timezone } = args
+      if (!event_id) return toolErr('event_id is required')
+      if (!calendar_id) return toolErr('calendar_id is required')
+
+      const tz = (timezone as string) ?? 'UTC'
+      const patch: Record<string, unknown> = {}
+      if (summary !== undefined) patch.summary = summary.toString().trim()
+      if (description !== undefined) patch.description = description
+      if (start !== undefined) {
+        const isAllDay = !(start as string).includes('T')
+        patch.start = isAllDay ? { date: start } : { dateTime: start, timeZone: tz }
+      }
+      if (end !== undefined) {
+        const isAllDay = !(end as string).includes('T')
+        patch.end = isAllDay ? { date: end } : { dateTime: end, timeZone: tz }
+      }
+      if (Object.keys(patch).length === 0) return toolErr('No fields to update')
+
+      const res = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendar_id as string)}/events/${encodeURIComponent(event_id as string)}`,
+        {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(patch),
+        }
+      )
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        return toolErr(`Google Calendar error: ${err?.error?.message ?? res.status}`)
+      }
+      const event = await res.json()
+      return toolOk(JSON.stringify({
+        id: event.id,
+        summary: event.summary,
+        start: event.start?.dateTime ?? event.start?.date,
+        end: event.end?.dateTime ?? event.end?.date,
+        html_link: event.htmlLink,
+      }, null, 2))
     }
 
     default:
