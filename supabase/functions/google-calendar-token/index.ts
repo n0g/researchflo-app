@@ -27,18 +27,19 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401, headers: CORS_HEADERS })
   }
 
-  // Read stored tokens using service role
+  // Read stored tokens from calendar_sources using service role
   const admin = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   )
-  const { data: settings } = await admin
-    .from('user_settings')
-    .select('gcal_access_token, gcal_refresh_token, gcal_token_expires_at')
+  const { data: source } = await admin
+    .from('calendar_sources')
+    .select('id, access_token, refresh_token, token_expires_at')
     .eq('user_id', user.id)
-    .single()
+    .eq('type', 'google')
+    .maybeSingle()
 
-  if (!settings?.gcal_refresh_token) {
+  if (!source?.refresh_token) {
     return new Response(JSON.stringify({ error: 'not_connected' }), { status: 404, headers: CORS_HEADERS })
   }
 
@@ -46,9 +47,9 @@ Deno.serve(async (req) => {
   const bufferMs = 5 * 60 * 1000 // 5 minute buffer
 
   // Return existing token if still valid
-  if (settings.gcal_access_token && settings.gcal_token_expires_at > now + bufferMs) {
+  if (source.access_token && source.token_expires_at > now + bufferMs) {
     return new Response(
-      JSON.stringify({ access_token: settings.gcal_access_token }),
+      JSON.stringify({ access_token: source.access_token }),
       { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } }
     )
   }
@@ -60,7 +61,7 @@ Deno.serve(async (req) => {
     body: new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID,
       client_secret: Deno.env.get('GOOGLE_CLIENT_SECRET')!,
-      refresh_token: settings.gcal_refresh_token,
+      refresh_token: source.refresh_token,
       grant_type: 'refresh_token',
     }),
   })
@@ -72,10 +73,10 @@ Deno.serve(async (req) => {
 
   const refreshed = await refreshRes.json()
 
-  await admin.from('user_settings').update({
-    gcal_access_token: refreshed.access_token,
-    gcal_token_expires_at: now + refreshed.expires_in * 1000,
-  }).eq('user_id', user.id)
+  await admin.from('calendar_sources').update({
+    access_token: refreshed.access_token,
+    token_expires_at: now + refreshed.expires_in * 1000,
+  }).eq('id', source.id)
 
   return new Response(
     JSON.stringify({ access_token: refreshed.access_token }),

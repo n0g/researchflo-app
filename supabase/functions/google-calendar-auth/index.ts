@@ -53,17 +53,35 @@ Deno.serve(async (req) => {
 
   const tokens = await tokenRes.json()
 
-  // Store tokens using service role to bypass RLS
+  // Store tokens in calendar_sources using service role to bypass RLS
   const admin = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   )
-  await admin.from('user_settings').upsert({
-    user_id: user.id,
-    gcal_access_token: tokens.access_token,
-    gcal_refresh_token: tokens.refresh_token,
-    gcal_token_expires_at: Date.now() + tokens.expires_in * 1000,
-  })
+  const { data: existing } = await admin
+    .from('calendar_sources')
+    .select('id')
+    .eq('user_id', user.id)
+    .eq('type', 'google')
+    .maybeSingle()
+
+  if (existing) {
+    await admin.from('calendar_sources').update({
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      token_expires_at: Date.now() + tokens.expires_in * 1000,
+    }).eq('id', existing.id)
+  } else {
+    await admin.from('calendar_sources').insert({
+      user_id: user.id,
+      type: 'google',
+      name: 'Google Calendar',
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      token_expires_at: Date.now() + tokens.expires_in * 1000,
+      is_write_target: true,
+    })
+  }
 
   return new Response(
     JSON.stringify({ ok: true }),

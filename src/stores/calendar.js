@@ -142,11 +142,10 @@ export const useCalendarStore = defineStore('calendar', () => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
-        await supabase.from('user_settings').update({
-          gcal_access_token: null,
-          gcal_refresh_token: null,
-          gcal_token_expires_at: null,
-        }).eq('user_id', user.id)
+        await supabase.from('calendar_sources')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('type', 'google')
       }
     } catch {}
   }
