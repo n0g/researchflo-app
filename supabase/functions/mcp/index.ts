@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { listCalendarsFromHomeSet, getCalendarEvents } from '../_shared/caldav.ts'
 
 const GOOGLE_CLIENT_ID = '809750411186-1315ibr7ag630sbdkd42kt2cojlflqr6.apps.googleusercontent.com'
 
@@ -174,12 +175,12 @@ const TOOLS = [
   },
   {
     name: 'list_calendars',
-    description: "List the user's Google Calendars with IDs, names, and access roles. Call this first to get calendar_id values for get_events, add_event, and update_event.",
+    description: "List all connected calendars (Google Calendar and CalDAV/iCloud) with IDs, names, and source. Call this first to get calendar_id values for get_events.",
     inputSchema: { type: 'object', additionalProperties: false, properties: {} },
   },
   {
     name: 'get_events',
-    description: 'Fetch Google Calendar events. You MUST provide either "date" (single day) or both "start_date" and "end_date" (range, max 2 weeks). Use list_calendars to resolve calendar_id. Returns event_id and calendar_id needed by update_event.',
+    description: 'Fetch calendar events from ALL connected calendar sources (Google + CalDAV/iCloud). You MUST provide either "date" (single day) or both "start_date" and "end_date" (range, max 2 weeks). Use list_calendars to resolve calendar_id. Returns event_id and calendar_id needed by update_event.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -581,41 +582,51 @@ async function callTool(name: string, args: any, userId: string, admin: Admin): 
     }
 
     case 'list_calendars': {
-      const { token, error: tokenError } = await _ensureGCalToken(userId, admin)
-      if (!token) return toolErr(tokenError!)
-
-      const res = await fetch(
-        'https://www.googleapis.com/calendar/v3/users/me/calendarList',
-        { headers: { Authorization: `Bearer ${token}` } }
-      )
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        return toolErr(`Google Calendar error: ${err?.error?.message ?? res.status}`)
-      }
-      const data = await res.json()
       // deno-lint-ignore no-explicit-any
-      const out = (data.items ?? []).map((cal: any) => ({
-        id: cal.id,
-        name: cal.summary,
-        description: cal.description ?? null,
-        primary: cal.primary ?? false,
-        access_role: cal.accessRole,
-        color: cal.backgroundColor ?? null,
-      }))
+      const out: any[] = []
+
+      // Google Calendar
+      const { token } = await _ensureGCalToken(userId, admin)
+      if (token) {
+        const res = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (res.ok) {
+          const data = await res.json()
+          // deno-lint-ignore no-explicit-any
+          for (const cal of (data.items ?? []) as any[]) {
+            out.push({ id: cal.id, name: cal.summary, source: 'Google Calendar', access_role: cal.accessRole, color: cal.backgroundColor ?? null })
+          }
+        }
+      }
+
+      // CalDAV / iCloud sources
+      const { data: caldavSources } = await admin.from('calendar_sources')
+        .select('id, type, name, url, username, password')
+        .eq('user_id', userId)
+        .in('type', ['caldav', 'icloud'])
+        .eq('enabled', true)
+      for (const src of (caldavSources ?? []) as any[]) {
+        try {
+          const cals = await listCalendarsFromHomeSet(src.url, src.username, src.password)
+          const srcLabel = src.type === 'icloud' ? 'iCloud' : src.name
+          for (const cal of cals) {
+            out.push({ id: cal.href, name: cal.name, source: srcLabel, access_role: 'owner', color: cal.color })
+          }
+        } catch { /* skip sources that fail */ }
+      }
+
       return toolOk(JSON.stringify(out, null, 2))
     }
 
     case 'get_events': {
-      const { token, error: tokenError } = await _ensureGCalToken(userId, admin)
-      if (!token) return toolErr(tokenError!)
-
       let timeMin: Date, timeMax: Date
       if (args.date) {
-        timeMin = new Date(`${args.date}T00:00:00`)
-        timeMax = new Date(`${args.date}T23:59:59`)
+        timeMin = new Date(`${args.date}T00:00:00Z`)
+        timeMax = new Date(`${args.date}T23:59:59Z`)
       } else if (args.start_date && args.end_date) {
-        timeMin = new Date(`${args.start_date}T00:00:00`)
-        timeMax = new Date(`${args.end_date}T23:59:59`)
+        timeMin = new Date(`${args.start_date}T00:00:00Z`)
+        timeMax = new Date(`${args.end_date}T23:59:59Z`)
         if (timeMax.getTime() - timeMin.getTime() > 14 * 24 * 60 * 60 * 1000) {
           return toolErr('Date range exceeds maximum of 2 weeks')
         }
@@ -623,35 +634,82 @@ async function callTool(name: string, args: any, userId: string, admin: Admin): 
         return toolErr('Provide either "date" or both "start_date" and "end_date"')
       }
 
-      const calId = encodeURIComponent((args.calendar_id as string) ?? 'primary')
-      const params = new URLSearchParams({
-        timeMin: timeMin.toISOString(),
-        timeMax: timeMax.toISOString(),
-        singleEvents: 'true',
-        orderBy: 'startTime',
-        maxResults: '250',
-      })
-      const res = await fetch(
-        `https://www.googleapis.com/calendar/v3/calendars/${calId}/events?${params}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      )
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        return toolErr(`Google Calendar error: ${err?.error?.message ?? res.status}`)
-      }
-      const data = await res.json()
       // deno-lint-ignore no-explicit-any
-      const out = (data.items ?? []).map((ev: any) => ({
-        id: ev.id,
-        summary: ev.summary ?? '(No title)',
-        start: ev.start?.dateTime ?? ev.start?.date,
-        end: ev.end?.dateTime ?? ev.end?.date,
-        description: ev.description ?? null,
-        location: ev.location ?? null,
-        calendar_id: args.calendar_id ?? 'primary',
-        html_link: ev.htmlLink ?? null,
-        status: ev.status ?? null,
+      const out: any[] = []
+
+      // Google Calendar
+      const { token } = await _ensureGCalToken(userId, admin)
+      if (token) {
+        const targetCalId = (args.calendar_id as string) ?? null
+        const { data: gcalSources } = await admin.from('calendar_sources')
+          .select('id').eq('user_id', userId).eq('type', 'google').maybeSingle()
+
+        // If a specific calendar_id was requested and it looks like a CalDAV href, skip Google
+        const isCalDAVHref = targetCalId && targetCalId.startsWith('http')
+
+        if (!isCalDAVHref) {
+          const params = new URLSearchParams({
+            timeMin: timeMin.toISOString(), timeMax: timeMax.toISOString(),
+            singleEvents: 'true', orderBy: 'startTime', maxResults: '250',
+          })
+          const calIdEnc = encodeURIComponent(targetCalId ?? 'primary')
+          const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calIdEnc}/events?${params}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+          if (res.ok) {
+            const data = await res.json()
+            // deno-lint-ignore no-explicit-any
+            for (const ev of (data.items ?? []) as any[]) {
+              out.push({
+                id: ev.id,
+                summary: ev.summary ?? '(No title)',
+                start: ev.start?.dateTime ?? ev.start?.date,
+                end: ev.end?.dateTime ?? ev.end?.date,
+                description: ev.description ?? null,
+                calendar_id: targetCalId ?? 'primary',
+                source: 'Google Calendar',
+                status: ev.status ?? null,
+              })
+            }
+          }
+        }
+      }
+
+      // CalDAV / iCloud sources (fan-out across all enabled sources if no specific caldav href requested)
+      const targetHref = args.calendar_id && (args.calendar_id as string).startsWith('http') ? args.calendar_id as string : null
+      const { data: caldavSources } = await admin.from('calendar_sources')
+        .select('id, type, name, url, username, password')
+        .eq('user_id', userId)
+        .in('type', ['caldav', 'icloud'])
+        .eq('enabled', true)
+
+      // deno-lint-ignore no-explicit-any
+      await Promise.allSettled(((caldavSources ?? []) as any[]).flatMap(async (src: any) => {
+        try {
+          const cals = await listCalendarsFromHomeSet(src.url, src.username, src.password)
+          const calList = targetHref ? cals.filter(c => c.href === targetHref) : cals
+          const srcLabel = src.type === 'icloud' ? 'iCloud' : src.name
+          await Promise.allSettled(calList.map(async cal => {
+            try {
+              const events = await getCalendarEvents(cal.href, src.username, src.password, timeMin, timeMax)
+              for (const ev of events) {
+                out.push({
+                  id: ev.uid,
+                  summary: ev.summary || '(No title)',
+                  start: ev.start,
+                  end: ev.end,
+                  description: ev.description || null,
+                  calendar_id: cal.href,
+                  source: `${srcLabel} — ${cal.name}`,
+                  status: null,
+                })
+              }
+            } catch { /* skip calendars that fail */ }
+          }))
+        } catch { /* skip sources that fail */ }
       }))
+
+      out.sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
       return toolOk(JSON.stringify(out, null, 2))
     }
 

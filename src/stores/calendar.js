@@ -15,24 +15,54 @@ const GOOGLE_CLIENT_ID = '809750411186-1315ibr7ag630sbdkd42kt2cojlflqr6.apps.goo
 const GCAL_REDIRECT_URI = 'https://researchflo.app'
 const EDGE_AUTH_URL = 'https://oqqevpkeqcbkqrgabpkc.supabase.co/functions/v1/google-calendar-auth'
 const EDGE_TOKEN_URL = 'https://oqqevpkeqcbkqrgabpkc.supabase.co/functions/v1/google-calendar-token'
+const CALDAV_PROXY_URL = 'https://oqqevpkeqcbkqrgabpkc.supabase.co/functions/v1/caldav-proxy'
 const SCOPES = 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly'
 
+// Composite target ID separators: "google:::calId" or "caldav:::sourceId:::calHref"
+const SEP = ':::'
+
 export const useCalendarStore = defineStore('calendar', () => {
-  // clientId kept for API compatibility with SettingsPage
   const clientId = ref(GOOGLE_CLIENT_ID)
-  // accessToken cached in memory — fetched from Edge Function, never stored in localStorage
   const accessToken = ref('')
   const tokenExpiry = ref(0)
   const selectedCalendarId = ref(localStorage.getItem('rb_gcal_calendar_id') || 'primary')
+  const selectedTargetId = ref(localStorage.getItem('rb_cal_target_id') || '')
   const calendarList = ref([])
   const events = ref([])
   const loading = ref(false)
   const connectError = ref('')
   const isConnected = ref(false)
 
+  // CalDAV sources
+  const caldavSources = ref([]) // { id, type, name, url, is_write_target, enabled }
+  const caldavCalendars = ref({}) // { [sourceId]: CalDAVCalendar[] }
+  const caldavConnecting = ref(false)
+  const caldavError = ref('')
+
   const writableCalendars = computed(() =>
     calendarList.value.filter(c => c.accessRole === 'writer' || c.accessRole === 'owner')
   )
+
+  // All calendars across all connected sources for the target dropdown
+  const allCalendars = computed(() => {
+    const gcal = writableCalendars.value.map(c => ({
+      key: `google${SEP}${c.id}`,
+      label: c.summary,
+      sourceLabel: 'Google Calendar',
+      color: c.backgroundColor,
+    }))
+    const caldav = caldavSources.value.flatMap(src => {
+      const cals = caldavCalendars.value[src.id] || []
+      const srcLabel = src.type === 'icloud' ? 'iCloud' : src.name
+      return cals.map(cal => ({
+        key: `caldav${SEP}${src.id}${SEP}${cal.href}`,
+        label: cal.name,
+        sourceLabel: srcLabel,
+        color: cal.color,
+      }))
+    })
+    return [...gcal, ...caldav]
+  })
 
   const scheduledByTaskId = computed(() => {
     const map = new Map()
@@ -46,7 +76,6 @@ export const useCalendarStore = defineStore('calendar', () => {
     return map
   })
 
-  // Get a valid access token from the Edge Function (cached in memory)
   async function _ensureToken() {
     if (accessToken.value && tokenExpiry.value > Date.now() + 5 * 60 * 1000) {
       return accessToken.value
@@ -72,11 +101,114 @@ export const useCalendarStore = defineStore('calendar', () => {
     }
   }
 
-  // Check OAuth callback params and verify connection on startup
+  async function _caldavProxy(action, params) {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) throw new Error('Not authenticated')
+    const res = await fetch(CALDAV_PROXY_URL, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, ...params }),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.error || `CalDAV proxy error: ${res.status}`)
+    }
+    return res.json()
+  }
+
+  // ── CalDAV source management ──────────────────────────────────────────────
+
+  async function loadCalDAVSources() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { data } = await supabase.from('calendar_sources')
+      .select('id, type, name, url, is_write_target, enabled')
+      .eq('user_id', user.id)
+      .in('type', ['caldav', 'icloud'])
+      .order('sort_order')
+    caldavSources.value = data || []
+
+    // Load calendars for each source in parallel
+    const results = await Promise.allSettled(
+      (data || []).map(async src => {
+        try {
+          const result = await _caldavProxy('list_calendars', { source_id: src.id })
+          return { id: src.id, cals: result.calendars || [] }
+        } catch { return { id: src.id, cals: [] } }
+      })
+    )
+    const next = {}
+    for (const r of results) {
+      if (r.status === 'fulfilled') next[r.value.id] = r.value.cals
+    }
+    caldavCalendars.value = next
+  }
+
+  async function connectCalDAV(type, serverUrl, username, password, name) {
+    caldavConnecting.value = true
+    caldavError.value = ''
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Not signed in')
+
+      const icloudUrl = 'https://caldav.icloud.com/.well-known/caldav'
+      const connectUrl = type === 'icloud' ? icloudUrl : serverUrl
+
+      const { calendars, homeSetUrl } = await _caldavProxy('discover', {
+        url: connectUrl, username, password,
+      })
+
+      const { data: src, error } = await supabase.from('calendar_sources').insert({
+        user_id: user.id,
+        type,
+        name: name || (type === 'icloud' ? 'iCloud Calendar' : 'CalDAV Calendar'),
+        url: homeSetUrl || connectUrl,
+        username,
+        password,
+        is_write_target: false,
+        enabled: true,
+      }).select().single()
+
+      if (error) throw new Error(error.message)
+
+      caldavSources.value = [...caldavSources.value, src]
+      caldavCalendars.value = { ...caldavCalendars.value, [src.id]: calendars || [] }
+      return { source: src, calendars: calendars || [] }
+    } catch (err) {
+      caldavError.value = err.message
+      throw err
+    } finally {
+      caldavConnecting.value = false
+    }
+  }
+
+  async function disconnectCalDAV(sourceId) {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    await supabase.from('calendar_sources').delete().eq('id', sourceId).eq('user_id', user.id)
+    caldavSources.value = caldavSources.value.filter(s => s.id !== sourceId)
+    const next = { ...caldavCalendars.value }
+    delete next[sourceId]
+    caldavCalendars.value = next
+    if (selectedTargetId.value.includes(`${SEP}${sourceId}${SEP}`) || selectedTargetId.value.endsWith(`${SEP}${sourceId}`)) {
+      saveTargetId('')
+    }
+  }
+
+  function saveTargetId(composite) {
+    selectedTargetId.value = composite
+    localStorage.setItem('rb_cal_target_id', composite)
+    if (composite.startsWith(`google${SEP}`)) {
+      const calId = composite.slice(`google${SEP}`.length)
+      selectedCalendarId.value = calId
+      localStorage.setItem('rb_gcal_calendar_id', calId)
+    }
+  }
+
+  // ── OAuth (Google) ────────────────────────────────────────────────────────
+
   async function init() {
     const params = new URLSearchParams(window.location.search)
-    // Only treat ?code as a GCal callback if we initiated a GCal OAuth flow
-    // (gcal_csrf in sessionStorage). A bare ?code is a Supabase PKCE callback.
     const isGCalCallback = params.has('code') && !!sessionStorage.getItem('gcal_csrf')
     if (isGCalCallback) {
       const code = params.get('code')
@@ -109,19 +241,19 @@ export const useCalendarStore = defineStore('calendar', () => {
       connectError.value = params.get('gcal_error')
       window.history.replaceState({}, '', window.location.pathname)
     } else {
-      // Silently check if connected
       await _ensureToken()
     }
+    // Always load CalDAV sources on init
+    await loadCalDAVSources()
   }
 
-  // Redirect to Google OAuth — app receives callback, POSTs code to Edge Function
   async function connect() {
     connectError.value = ''
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) { connectError.value = 'Not signed in'; return }
     const csrf = crypto.randomUUID()
     sessionStorage.setItem('gcal_csrf', csrf)
-    const params = new URLSearchParams({
+    const p = new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID,
       redirect_uri: GCAL_REDIRECT_URI,
       response_type: 'code',
@@ -130,7 +262,7 @@ export const useCalendarStore = defineStore('calendar', () => {
       prompt: 'consent',
       state: csrf,
     })
-    window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`
+    window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${p}`
   }
 
   async function disconnect() {
@@ -142,20 +274,17 @@ export const useCalendarStore = defineStore('calendar', () => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
-        await supabase.from('calendar_sources')
-          .delete()
-          .eq('user_id', user.id)
-          .eq('type', 'google')
+        await supabase.from('calendar_sources').delete().eq('user_id', user.id).eq('type', 'google')
       }
     } catch {}
   }
 
-  // saveClientId kept for API compatibility
   function saveClientId(id) { clientId.value = id }
 
   function saveCalendarId(id) {
     selectedCalendarId.value = id
     localStorage.setItem('rb_gcal_calendar_id', id)
+    saveTargetId(`google${SEP}${id}`)
   }
 
   async function fetchCalendarList() {
@@ -177,9 +306,7 @@ export const useCalendarStore = defineStore('calendar', () => {
   }
 
   async function loadWeekEvents(weekStart) {
-    const token = await _ensureToken()
-    if (!token) return
-    if (!calendarList.value.length) await fetchCalendarList()
+    if (!calendarList.value.length && isConnected.value) await fetchCalendarList()
     loading.value = true
     try {
       const timeMin = new Date(weekStart)
@@ -187,32 +314,74 @@ export const useCalendarStore = defineStore('calendar', () => {
       const timeMax = new Date(weekStart)
       timeMax.setDate(timeMax.getDate() + 7)
       timeMax.setHours(23, 59, 59, 999)
-      const params = new URLSearchParams({
-        timeMin: timeMin.toISOString(),
-        timeMax: timeMax.toISOString(),
-        singleEvents: 'true',
-        orderBy: 'startTime',
-        maxResults: '250',
-      })
-      const cals = calendarList.value.length
-        ? calendarList.value
-        : [{ id: 'primary', backgroundColor: null }]
-      const results = await Promise.allSettled(
-        cals.map(async (cal) => {
-          const res = await fetch(
-            `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?${params}`,
-            { headers: { Authorization: `Bearer ${token}` } }
-          )
-          if (res.status === 401) { await disconnect(); return [] }
-          if (!res.ok) return []
-          const data = await res.json()
-          return (data.items || []).map(ev => ({ ...ev, _calColor: cal.backgroundColor, _calId: cal.id }))
+
+      const allEvents = []
+
+      // 1. Google Calendar
+      const token = await _ensureToken()
+      if (token) {
+        const qp = new URLSearchParams({
+          timeMin: timeMin.toISOString(), timeMax: timeMax.toISOString(),
+          singleEvents: 'true', orderBy: 'startTime', maxResults: '250',
         })
+        const cals = calendarList.value.length ? calendarList.value : [{ id: 'primary', backgroundColor: null }]
+        const gcalResults = await Promise.allSettled(
+          cals.map(async cal => {
+            const res = await fetch(
+              `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?${qp}`,
+              { headers: { Authorization: `Bearer ${token}` } }
+            )
+            if (res.status === 401) { await disconnect(); return [] }
+            if (!res.ok) return []
+            const data = await res.json()
+            return (data.items || []).map(ev => ({
+              ...ev, _calColor: cal.backgroundColor, _calId: cal.id, _sourceType: 'google',
+            }))
+          })
+        )
+        for (const r of gcalResults) {
+          if (r.status === 'fulfilled') allEvents.push(...r.value)
+        }
+      }
+
+      // 2. CalDAV / iCloud sources
+      const enabledSources = caldavSources.value.filter(s => s.enabled)
+      if (enabledSources.length) {
+        const caldavResults = await Promise.allSettled(
+          enabledSources.flatMap(src => {
+            const cals = caldavCalendars.value[src.id] || []
+            return cals.map(async cal => {
+              try {
+                const result = await _caldavProxy('get_events', {
+                  source_id: src.id,
+                  cal_href: cal.href,
+                  time_min: timeMin.toISOString(),
+                  time_max: timeMax.toISOString(),
+                })
+                return (result.events || []).map(ev => ({
+                  id: ev.uid,
+                  summary: ev.summary || '(No title)',
+                  description: ev.description || '',
+                  start: ev.isAllDay ? { date: ev.start } : { dateTime: ev.start },
+                  end: ev.isAllDay ? { date: ev.end } : { dateTime: ev.end },
+                  _calColor: cal.color || null,
+                  _calId: cal.href,
+                  _sourceType: src.type,
+                  _sourceId: src.id,
+                  extendedProperties: ev.taskId ? { private: { todoist_task_id: ev.taskId } } : undefined,
+                }))
+              } catch { return [] }
+            })
+          })
+        )
+        for (const r of caldavResults) {
+          if (r.status === 'fulfilled') allEvents.push(...r.value)
+        }
+      }
+
+      events.value = allEvents.sort(
+        (a, b) => new Date(a.start?.dateTime || a.start?.date) - new Date(b.start?.dateTime || b.start?.date)
       )
-      events.value = results
-        .filter(r => r.status === 'fulfilled')
-        .flatMap(r => r.value)
-        .sort((a, b) => new Date(a.start?.dateTime || a.start?.date) - new Date(b.start?.dateTime || b.start?.date))
     } finally {
       loading.value = false
     }
@@ -233,34 +402,61 @@ export const useCalendarStore = defineStore('calendar', () => {
   }
 
   async function createEvent(task, projectName, dateObj, startHour, startMinute, durationMinutes) {
-    const token = await _ensureToken()
-    if (!token) throw new Error('Not authenticated')
     const start = new Date(dateObj)
     start.setHours(startHour, startMinute, 0, 0)
     const end = new Date(start.getTime() + durationMinutes * 60_000)
+    const desc = buildEventDescription(task, projectName)
+
+    const targetId = selectedTargetId.value
+    const isCaldav = targetId.startsWith(`caldav${SEP}`)
+
+    if (isCaldav) {
+      // Parse: "caldav:::sourceId:::calHref"
+      const withoutPrefix = targetId.slice(`caldav${SEP}`.length)
+      const sepIdx = withoutPrefix.indexOf(SEP)
+      const sourceId = withoutPrefix.slice(0, sepIdx)
+      const calHref = withoutPrefix.slice(sepIdx + SEP.length)
+
+      const uid = `${crypto.randomUUID()}@researchflo.app`
+      await _caldavProxy('create_event', {
+        source_id: sourceId, cal_href: calHref, uid,
+        summary: task.content, description: desc,
+        start_iso: start.toISOString(), end_iso: end.toISOString(),
+        task_id: String(task.id),
+      })
+
+      const calColor = (caldavCalendars.value[sourceId] || []).find(c => c.href === calHref)?.color || null
+      const ev = {
+        id: uid, summary: task.content, description: desc,
+        start: { dateTime: start.toISOString() }, end: { dateTime: end.toISOString() },
+        _calColor: calColor, _calId: calHref, _sourceType: 'caldav', _sourceId: sourceId,
+        extendedProperties: { private: { todoist_task_id: String(task.id) } },
+      }
+      events.value.push(ev)
+      useBoardStore().saveGCalEvent(task.id, uid, calHref).catch(() => {})
+      return ev
+    }
+
+    // Google Calendar
+    const token = await _ensureToken()
+    if (!token) throw new Error('Not authenticated')
+    const googleCalId = targetId.startsWith(`google${SEP}`) ? targetId.slice(`google${SEP}`.length) : selectedCalendarId.value
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
     const body = {
-      summary: task.content,
-      description: buildEventDescription(task, projectName),
+      summary: task.content, description: desc,
       start: { dateTime: start.toISOString(), timeZone: tz },
       end: { dateTime: end.toISOString(), timeZone: tz },
       extendedProperties: { private: { todoist_task_id: String(task.id) } },
     }
-    const calId = encodeURIComponent(selectedCalendarId.value)
     const res = await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/${calId}/events`,
-      {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      }
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(googleCalId)}/events`,
+      { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
     )
     if (!res.ok) throw new Error(`Failed to create event: ${res.status}`)
     const event = await res.json()
-    const calColor = calendarList.value.find(c => c.id === selectedCalendarId.value)?.backgroundColor ?? null
-    events.value.push({ ...event, _calColor: calColor, _calId: selectedCalendarId.value })
-    const boardStore = useBoardStore()
-    boardStore.saveGCalEvent(task.id, event.id, selectedCalendarId.value).catch(() => {})
+    const calColor = calendarList.value.find(c => c.id === googleCalId)?.backgroundColor ?? null
+    events.value.push({ ...event, _calColor: calColor, _calId: googleCalId, _sourceType: 'google' })
+    useBoardStore().saveGCalEvent(task.id, event.id, googleCalId).catch(() => {})
     return event
   }
 
@@ -273,6 +469,7 @@ export const useCalendarStore = defineStore('calendar', () => {
     const timeLabel = (task.labels || []).find(l => l.startsWith('time::'))
     const duration = timeLabel ? durationMap[timeLabel.slice(6)] : null
     await Promise.allSettled(evs.map(async ev => {
+      if (ev._sourceType !== 'google' && ev._sourceType !== undefined) return
       const patch = { summary: task.content, description: desc }
       if (duration && ev.start?.dateTime) {
         const start = new Date(ev.start.dateTime)
@@ -281,11 +478,7 @@ export const useCalendarStore = defineStore('calendar', () => {
       }
       const res = await fetch(
         `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(ev._calId)}/events/${ev.id}`,
-        {
-          method: 'PATCH',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify(patch),
-        }
+        { method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(patch) }
       )
       if (!res.ok) return
       const updated = await res.json()
@@ -341,11 +534,7 @@ export const useCalendarStore = defineStore('calendar', () => {
           if (taskUpdated >= calUpdated) patch.summary = task.content
           const patchRes = await fetch(
             `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(stored.calId)}/events/${encodeURIComponent(stored.eventId)}`,
-            {
-              method: 'PATCH',
-              headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify(patch),
-            }
+            { method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(patch) }
           )
           if (patchRes.ok) {
             const updated = await patchRes.json()
@@ -396,11 +585,7 @@ export const useCalendarStore = defineStore('calendar', () => {
     }
     const res = await fetch(
       `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${eventId}`,
-      {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      }
+      { method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
     )
     if (!res.ok) throw new Error(`Failed to update event: ${res.status}`)
     const updated = await res.json()
@@ -433,13 +618,10 @@ export const useCalendarStore = defineStore('calendar', () => {
     const evs = scheduledByTaskId.value.get(String(taskId))
     if (!evs?.length) return
     const ev = evs[0]
+    if (ev._sourceType && ev._sourceType !== 'google') return
     const res = await fetch(
       `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(ev._calId)}/events/${ev.id}`,
-      {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ summary: title }),
-      }
+      { method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ summary: title }) }
     )
     if (!res.ok) return
     const updated = await res.json()
@@ -452,11 +634,7 @@ export const useCalendarStore = defineStore('calendar', () => {
     if (!token) throw new Error('Not authenticated')
     await fetch(
       `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${eventId}`,
-      {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ extendedProperties: { private: { todoist_task_id: String(taskId) } } }),
-      }
+      { method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ extendedProperties: { private: { todoist_task_id: String(taskId) } } }) }
     )
     const ev = events.value.find(e => e.id === eventId)
     if (ev) {
@@ -471,11 +649,7 @@ export const useCalendarStore = defineStore('calendar', () => {
     if (!token) return
     await fetch(
       `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${encodeURIComponent(eventId)}`,
-      {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ extendedProperties: { private: { todoist_task_id: null } } }),
-      }
+      { method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ extendedProperties: { private: { todoist_task_id: null } } }) }
     )
   }
 
@@ -483,9 +657,7 @@ export const useCalendarStore = defineStore('calendar', () => {
     const token = await _ensureToken()
     if (!token) return
     const boardStore = useBoardStore()
-    const scheduledTasks = boardStore.tasks.filter(t =>
-      !t.is_completed && (t.description || '').includes('📅 GCal:')
-    )
+    const scheduledTasks = boardStore.tasks.filter(t => !t.is_completed && (t.description || '').includes('📅 GCal:'))
     await Promise.allSettled(scheduledTasks.map(async task => {
       const stored = _parseGCalLine(task)
       if (!stored) return
@@ -493,10 +665,7 @@ export const useCalendarStore = defineStore('calendar', () => {
         `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(stored.calId)}/events/${encodeURIComponent(stored.eventId)}`,
         { headers: { Authorization: `Bearer ${token}` } }
       )
-      if (res.status === 404 || res.status === 410) {
-        await boardStore.clearScheduledTime(task.id)
-        return
-      }
+      if (res.status === 404 || res.status === 410) { await boardStore.clearScheduledTime(task.id); return }
       if (!res.ok) return
       const ev = await res.json()
       if (!ev.start?.dateTime) return
@@ -510,15 +679,15 @@ export const useCalendarStore = defineStore('calendar', () => {
 
   watch(isConnected, (connected) => { if (connected) drainSyncQueue().catch(() => {}) })
 
-  async function checkConnection() {
-    await _ensureToken()
-  }
+  async function checkConnection() { await _ensureToken() }
 
   return {
-    clientId, events, loading, connectError, selectedCalendarId, calendarList, writableCalendars,
-    isConnected, scheduledByTaskId,
-    saveClientId, saveCalendarId, connect, disconnect, init, checkConnection,
+    clientId, events, loading, connectError, selectedCalendarId, selectedTargetId,
+    calendarList, writableCalendars, allCalendars, isConnected, scheduledByTaskId,
+    caldavSources, caldavCalendars, caldavConnecting, caldavError,
+    saveClientId, saveCalendarId, saveTargetId, connect, disconnect, init, checkConnection,
     loadWeekEvents, createEvent, deleteEvent, deleteAllByTaskId, updateEvent, updateEventTitle,
     syncEventForTask, fetchCalendarList, linkEventToTask, reconcileScheduledTasks, unlinkTaskFromEvent,
+    loadCalDAVSources, connectCalDAV, disconnectCalDAV,
   }
 })

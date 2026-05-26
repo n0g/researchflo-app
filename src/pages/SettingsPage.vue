@@ -207,6 +207,9 @@
           <!-- ── Calendar ── -->
           <div id="settings-calendar" class="settings-section">
             <div class="settings-section-title">Calendar</div>
+
+            <!-- Google Calendar -->
+            <div class="settings-subsection-label">Google Calendar</div>
             <template v-if="!calStore.isConnected">
               <div class="settings-card">
                 <p class="settings-hint">Connect to schedule tasks to your Google Calendar from the Schedule page.</p>
@@ -241,27 +244,68 @@
                   </span>
                   <button class="btn sm danger" @click="calStore.disconnect()">Disconnect</button>
                 </div>
-                <div class="settings-row">
-                  <span class="settings-row-label">Calendar</span>
-                  <select
-                    class="cal-select"
-                    :value="calStore.selectedCalendarId"
-                    @change="calStore.saveCalendarId($event.target.value)"
-                    @focus="calStore.fetchCalendarList()"
-                  >
-                    <option
-                      v-if="!calStore.writableCalendars.length"
-                      :value="calStore.selectedCalendarId"
-                    >{{ calStore.selectedCalendarId }}</option>
-                    <option
-                      v-for="cal in calStore.writableCalendars"
-                      :key="cal.id"
-                      :value="cal.id"
-                    >{{ cal.summary }}</option>
-                  </select>
-                </div>
               </div>
             </template>
+
+            <!-- CalDAV / iCloud Sources -->
+            <div class="settings-subsection-label" style="margin-top: 20px">CalDAV / iCloud</div>
+            <div v-if="calStore.caldavSources.length" class="settings-row-group" style="margin-bottom: 8px">
+              <div v-for="src in calStore.caldavSources" :key="src.id" class="settings-row">
+                <span class="settings-row-label">
+                  <span class="gcal-connected-dot"></span>
+                  {{ src.name }}
+                  <span class="source-type-badge">{{ src.type === 'icloud' ? 'iCloud' : 'CalDAV' }}</span>
+                </span>
+                <button class="btn sm danger" @click="calStore.disconnectCalDAV(src.id)">Disconnect</button>
+              </div>
+            </div>
+            <div class="settings-card">
+              <div class="settings-subsection-label" style="padding: 0; margin-bottom: 10px">Add Calendar</div>
+              <div class="theme-segmented" style="margin-bottom: 12px" role="group" aria-label="Calendar type">
+                <button class="theme-seg-btn" :class="{ active: caldavType === 'caldav' }" @click="caldavType = 'caldav'; caldavServerUrl = ''">CalDAV</button>
+                <button class="theme-seg-btn" :class="{ active: caldavType === 'icloud' }" @click="caldavType = 'icloud'; caldavServerUrl = ''">iCloud</button>
+              </div>
+              <template v-if="caldavType === 'icloud'">
+                <p class="settings-hint" style="margin-bottom: 10px">
+                  Requires an <strong>app-specific password</strong> — not your Apple ID password.<br>
+                  Generate one at <em>appleid.apple.com → Sign-In and Security → App-Specific Passwords</em>.
+                </p>
+                <input type="email" v-model="caldavUsername" placeholder="Apple ID email" aria-label="Apple ID email">
+                <input type="password" v-model="caldavPassword" placeholder="App-specific password" aria-label="App-specific password" style="margin-top: 8px">
+              </template>
+              <template v-else>
+                <input type="url" v-model="caldavServerUrl" placeholder="https://caldav.example.com" aria-label="CalDAV server URL">
+                <input type="text" v-model="caldavUsername" placeholder="Username" aria-label="Username" style="margin-top: 8px">
+                <input type="password" v-model="caldavPassword" placeholder="Password" aria-label="Password" style="margin-top: 8px">
+              </template>
+              <input type="text" v-model="caldavName" :placeholder="caldavType === 'icloud' ? 'Name (e.g. iCloud)' : 'Name (e.g. Work)'" aria-label="Calendar name" style="margin-top: 8px">
+              <div v-if="calStore.caldavError" class="error-msg" role="alert" style="margin-top: 8px">{{ calStore.caldavError }}</div>
+              <div class="settings-actions" style="margin-top: 12px">
+                <button class="btn sm primary" :disabled="calStore.caldavConnecting" @click="addCalDAVSource">
+                  {{ calStore.caldavConnecting ? 'Connecting…' : 'Connect' }}
+                </button>
+              </div>
+            </div>
+
+            <!-- Target calendar (shown when any source connected) -->
+            <div v-if="calStore.isConnected || calStore.caldavSources.length" class="settings-row-group" style="margin-top: 12px">
+              <div class="settings-row">
+                <span class="settings-row-label">Write events to</span>
+                <select
+                  class="cal-select"
+                  :value="calStore.selectedTargetId"
+                  @change="onCalendarTargetChange($event.target.value)"
+                  @focus="calStore.fetchCalendarList()"
+                >
+                  <option v-if="!calStore.allCalendars.length" value="">Loading…</option>
+                  <option
+                    v-for="cal in calStore.allCalendars"
+                    :key="cal.key"
+                    :value="cal.key"
+                  >{{ cal.label }} — {{ cal.sourceLabel }}</option>
+                </select>
+              </div>
+            </div>
           </div>
 
           <!-- ── Scheduling ── -->
@@ -532,6 +576,30 @@ async function toggleWorkDay(day) {
     : [...schedWorkDays.value, day].sort((a, b) => a - b)
   schedWorkDays.value = days
   await settingsStore.save('work_days', days)
+}
+
+// ── CalDAV / iCloud ──
+const caldavType = ref('caldav')
+const caldavServerUrl = ref('')
+const caldavUsername = ref('')
+const caldavPassword = ref('')
+const caldavName = ref('')
+
+async function addCalDAVSource() {
+  if (!caldavUsername.value || !caldavPassword.value) return
+  if (caldavType.value === 'caldav' && !caldavServerUrl.value) return
+  try {
+    await calStore.connectCalDAV(caldavType.value, caldavServerUrl.value, caldavUsername.value, caldavPassword.value, caldavName.value)
+    caldavUsername.value = ''
+    caldavPassword.value = ''
+    caldavServerUrl.value = ''
+    caldavName.value = ''
+  } catch { /* error shown via calStore.caldavError */ }
+}
+
+function onCalendarTargetChange(value) {
+  if (!value) return
+  calStore.saveTargetId(value)
 }
 
 // ── Google Calendar ──
