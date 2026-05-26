@@ -828,6 +828,14 @@ Reschedule a task:
   1. list_tasks — get task_id
   2. reschedule_task — no calendar lookup needed, reads event reference from the task
 
+Create and schedule new tasks (e.g. paper reviews before a deadline):
+  1. list_projects — find the right project_id
+  2. add_task (repeat) — create one task per item; set due_date to the deadline
+  3. list_calendars — resolve calendar_id once
+  4. get_events — check the window between now and the deadline for existing commitments
+  5. schedule_task (repeat) — distribute tasks evenly across free slots before the deadline
+  When spacing tasks, avoid weekends and existing events; prefer morning slots unless told otherwise.
+
 Quick project status update:
   1. list_projects — get project_id and current state
   2. update_project — set new stage, status_text, deadline in a single call`,
