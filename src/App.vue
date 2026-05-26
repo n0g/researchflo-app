@@ -1,5 +1,9 @@
 <template>
   <f7-app v-bind="f7params">
+    <!-- DEBUG: safe area overlay — REMOVE BEFORE SHIP -->
+    <div style="position:fixed;bottom:0;left:0;right:0;z-index:999999;background:rgba(255,0,0,0.5);height:env(safe-area-inset-bottom,0px);pointer-events:none"></div>
+    <div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:999999;background:rgba(0,0,0,0.8);color:white;font-size:11px;padding:8px 12px;border-radius:8px;font-family:monospace;pointer-events:none" id="debug-overlay"></div>
+
     <!-- Show nothing until auth is resolved (prevents passkey popup on magic-link load) -->
     <div v-if="!authStore.initialized" class="app-boot" />
 
@@ -119,6 +123,18 @@ function dismissPasskey() {
 }
 
 onMounted(async () => {
+  // DEBUG: show viewport/safe-area info — REMOVE BEFORE SHIP
+  const el = document.getElementById('debug-overlay')
+  if (el) {
+    const update = () => {
+      const sab = getComputedStyle(document.documentElement).getPropertyValue('--sab').trim()
+      el.textContent = `innerH=${window.innerHeight} screenH=${screen.height} sab=${sab}`
+    }
+    document.documentElement.style.setProperty('--sab', 'env(safe-area-inset-bottom)')
+    update()
+    window.addEventListener('resize', update)
+  }
+
   // Capture ?invite=TOKEN and ?email= from URL before F7 boots
   const _inviteParams = new URLSearchParams(window.location.search)
   const urlInvite = _inviteParams.get('invite')
