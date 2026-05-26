@@ -413,13 +413,13 @@
           </div>
 
           <!-- Private tasks section -->
-          <div class="task-section-header task-section-private" @click="togglePrivate">
+          <div v-if="showPrivateSection" class="task-section-header task-section-private" @click="togglePrivate">
             <span class="task-section-caret" :class="{ expanded: showPrivate }"><i class="ph ph-caret-right" aria-hidden="true"></i></span>
             <i class="ph ph-detective task-section-icon" aria-hidden="true"></i>
             <span class="task-section-label">Private</span>
             <span class="task-section-count">· {{ privateTasks.length }}</span>
           </div>
-          <div v-if="showPrivate" class="task-section-body">
+          <div v-if="showPrivateSection && showPrivate" class="task-section-body">
             <div ref="privateTaskListEl" role="list" aria-label="Private tasks" @pointerdown="onPrivateDragStart">
               <template v-for="(task, idx) in privateTasks" :key="task.id">
                 <div v-if="privateDragId && privateDropIndex === idx" class="task-drop-indicator" aria-hidden="true" />
@@ -462,14 +462,14 @@
           </div>
 
           <!-- Completed tasks section -->
-          <div class="task-section-header task-section-archive" @click="toggleArchive">
+          <div v-if="completedCount > 0" class="task-section-header task-section-archive" @click="toggleArchive">
             <span class="task-section-caret" :class="{ expanded: showArchive }"><i class="ph ph-caret-right" aria-hidden="true"></i></span>
             <i class="ph ph-archive task-section-icon" aria-hidden="true"></i>
             <span class="task-section-label">Completed</span>
             <span v-if="!loadingArchive" class="task-section-count">· {{ completedCount }}</span>
             <i v-else class="ph ph-arrow-clockwise spin-icon task-section-loading" aria-hidden="true"></i>
           </div>
-          <div v-if="showArchive" class="task-section-body">
+          <div v-if="completedCount > 0 && showArchive" class="task-section-body">
             <div role="list" aria-label="Completed tasks">
               <TaskItem
                 v-for="task in completedTasks"
@@ -529,6 +529,19 @@ const tasks = computed(() => store.projectTasks(projectId.value))
 const privateTasks = computed(() => store.privateProjectTasks(projectId.value))
 const completedTasks = computed(() => store.completedProjectTasks(projectId.value))
 const completedCount = computed(() => store.completedProjectTaskCount(projectId.value))
+
+// Show private section only when there are private tasks OR at least one collaborator has an account
+const anyCollaboratorHasAccount = computed(() => {
+  const myUserId = authStore.user?.id
+  const p = project.value
+  if (!p) return false
+  const members = [
+    p.owner_person,
+    ...(p.members || []).map(m => m.person)
+  ].filter(Boolean)
+  return members.some(m => m.user_id && m.user_id !== myUserId)
+})
+const showPrivateSection = computed(() => privateTasks.value.length > 0 || anyCollaboratorHasAccount.value)
 
 const showPrivate = ref(false)
 const showArchive = ref(false)
