@@ -134,6 +134,11 @@ const TOOLS = [
     },
   },
   {
+    name: 'list_calendars',
+    description: "List the user's Google Calendars with their IDs, names, and access roles.",
+    inputSchema: { type: 'object', properties: {} },
+  },
+  {
     name: 'get_events',
     description: 'Fetch Google Calendar events for a single day or a date range (max 2 weeks). Returns events from the primary calendar by default.',
     inputSchema: {
@@ -511,6 +516,31 @@ async function callTool(name: string, args: any, userId: string, admin: Admin): 
           current: i === 0,
         }
       })
+      return toolOk(JSON.stringify(out, null, 2))
+    }
+
+    case 'list_calendars': {
+      const { token, error: tokenError } = await _ensureGCalToken(userId, admin)
+      if (!token) return toolErr(tokenError!)
+
+      const res = await fetch(
+        'https://www.googleapis.com/calendar/v3/users/me/calendarList',
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        return toolErr(`Google Calendar error: ${err?.error?.message ?? res.status}`)
+      }
+      const data = await res.json()
+      // deno-lint-ignore no-explicit-any
+      const out = (data.items ?? []).map((cal: any) => ({
+        id: cal.id,
+        name: cal.summary,
+        description: cal.description ?? null,
+        primary: cal.primary ?? false,
+        access_role: cal.accessRole,
+        color: cal.backgroundColor ?? null,
+      }))
       return toolOk(JSON.stringify(out, null, 2))
     }
 
