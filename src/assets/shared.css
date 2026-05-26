@@ -551,6 +551,49 @@ html[data-theme="dark"] .theme-seg-btn.active {
   box-shadow: 0 1px 3px rgba(0,0,0,0.4);
 }
 
+/* Scheduling preferences UI */
+.settings-input-inline {
+  font-family: var(--font);
+  font-size: 13px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text);
+  width: 200px;
+}
+.settings-input-inline:focus { outline: none; border-color: var(--accent); }
+.settings-time-input {
+  font-family: var(--font);
+  font-size: 13px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text);
+  width: 90px;
+}
+.settings-time-input:focus { outline: none; border-color: var(--accent); }
+.time-range { display: flex; align-items: center; gap: 6px; }
+.time-range-sep { color: var(--text3); font-size: 13px; }
+.day-picker { display: flex; gap: 4px; }
+.day-chip {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: var(--bg2);
+  color: var(--text2);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.day-chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
 /* ── TASK CHECK + DUE (shared between project detail and task list) ── */
 .task-check {
   width: 20px; height: 20px;

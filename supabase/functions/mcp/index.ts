@@ -153,6 +153,26 @@ const TOOLS = [
     },
   },
   {
+    name: 'get_scheduling_preferences',
+    description: 'Get the user\'s scheduling preferences: timezone, working hours, working days, and default task duration. Call this at the start of any scheduling session before placing tasks on the calendar.',
+    inputSchema: { type: 'object', additionalProperties: false, properties: {} },
+  },
+  {
+    name: 'update_scheduling_preferences',
+    description: 'Update the user\'s scheduling preferences. Only provided fields are changed.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        timezone: { type: 'string', description: 'IANA timezone (e.g. "America/New_York", "Europe/Berlin").' },
+        work_start_time: { type: 'string', description: 'Work day start in HH:MM format (e.g. "09:00").' },
+        work_end_time: { type: 'string', description: 'Work day end in HH:MM format (e.g. "17:00").' },
+        work_days: { type: 'array', items: { type: 'number', enum: [1, 2, 3, 4, 5, 6, 7] }, description: 'Working days as ISO weekday numbers: 1=Monday … 7=Sunday.' },
+        default_task_duration_minutes: { type: 'number', description: 'Default scheduled event duration in minutes.' },
+      },
+    },
+  },
+  {
     name: 'list_calendars',
     description: "List the user's Google Calendars with IDs, names, and access roles. Call this first to get calendar_id values for get_events, add_event, and update_event.",
     inputSchema: { type: 'object', additionalProperties: false, properties: {} },
@@ -526,6 +546,40 @@ async function callTool(name: string, args: any, userId: string, admin: Admin): 
       return toolOk(JSON.stringify(out, null, 2))
     }
 
+    case 'get_scheduling_preferences': {
+      const { data: settings } = await admin
+        .from('user_settings')
+        .select('timezone, work_start_time, work_end_time, work_days, default_task_duration_minutes')
+        .eq('user_id', userId)
+        .maybeSingle()
+
+      const DAY_NAMES = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+      const days = (settings as any)?.work_days ?? [1, 2, 3, 4, 5]
+      return toolOk(JSON.stringify({
+        timezone: (settings as any)?.timezone ?? null,
+        work_start_time: (settings as any)?.work_start_time ?? '09:00',
+        work_end_time: (settings as any)?.work_end_time ?? '17:00',
+        work_days: days,
+        work_day_names: days.map((d: number) => DAY_NAMES[d] ?? d),
+        default_task_duration_minutes: (settings as any)?.default_task_duration_minutes ?? 60,
+      }, null, 2))
+    }
+
+    case 'update_scheduling_preferences': {
+      const patch: Record<string, unknown> = {}
+      if (args.timezone !== undefined) patch.timezone = args.timezone
+      if (args.work_start_time !== undefined) patch.work_start_time = args.work_start_time
+      if (args.work_end_time !== undefined) patch.work_end_time = args.work_end_time
+      if (args.work_days !== undefined) patch.work_days = args.work_days
+      if (args.default_task_duration_minutes !== undefined) patch.default_task_duration_minutes = args.default_task_duration_minutes
+      if (Object.keys(patch).length === 0) return toolErr('No fields to update')
+      await admin.from('user_settings').upsert(
+        { user_id: userId, ...patch },
+        { onConflict: 'user_id' }
+      )
+      return toolOk('Scheduling preferences updated.')
+    }
+
     case 'list_calendars': {
       const { token, error: tokenError } = await _ensureGCalToken(userId, admin)
       if (!token) return toolErr(tokenError!)
@@ -793,7 +847,7 @@ TOOL CHAINING (call in this order):
 - Projects: list_projects → update_project / add_task / get_stage_history
 - Tasks: list_projects → list_tasks → update_task / mark_task_complete
 - Calendar (read): list_calendars → get_events
-- Schedule task: list_tasks → (list_calendars) → (get_events, check conflicts) → schedule_task
+- Schedule task: get_scheduling_preferences → list_tasks → (list_calendars) → (get_events, check conflicts) → schedule_task
 - Reschedule task: list_tasks → reschedule_task
 
 ID SOURCES:
@@ -819,7 +873,8 @@ Batch task capture after a meeting:
   2. add_task (repeat) — one call per task captured; set priority and due_date while context is fresh
 
 Schedule tasks for the week:
-  1. list_tasks — find open tasks to schedule
+  1. get_scheduling_preferences — get working hours, days, timezone, default duration
+  2. list_tasks — find open tasks to schedule
   2. list_calendars — resolve calendar_id once
   3. get_events — check existing commitments for the target days
   4. schedule_task (repeat) — one call per task; creates the calendar event and writes the reference back to the task
@@ -829,7 +884,8 @@ Reschedule a task:
   2. reschedule_task — no calendar lookup needed, reads event reference from the task
 
 Create and schedule new tasks (e.g. paper reviews before a deadline):
-  1. list_projects — find the right project_id
+  1. get_scheduling_preferences — get working hours, days, timezone, default duration
+  2. list_projects — find the right project_id
   2. add_task (repeat) — create one task per item; set due_date to the deadline
   3. list_calendars — resolve calendar_id once
   4. get_events — check the window between now and the deadline for existing commitments

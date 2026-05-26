@@ -18,6 +18,10 @@
             <i class="ph ph-article" aria-hidden="true"></i>
             <span class="sidebar-label">HotCRP</span>
           </button>
+          <button class="sidebar-nav-item" title="Scheduling" @click="scrollTo('settings-scheduling')">
+            <i class="ph ph-clock" aria-hidden="true"></i>
+            <span class="sidebar-label">Scheduling</span>
+          </button>
           <button class="sidebar-nav-item" title="Google Calendar" @click="scrollTo('settings-calendar')">
             <i class="ph ph-calendar-dots" aria-hidden="true"></i>
             <span class="sidebar-label">Calendar</span>
@@ -260,6 +264,56 @@
             </template>
           </div>
 
+          <!-- ── Scheduling ── -->
+          <div id="settings-scheduling" class="settings-section">
+            <div class="settings-section-title">Scheduling</div>
+            <div class="settings-row-group">
+              <div class="settings-row">
+                <span class="settings-row-label">Timezone</span>
+                <input
+                  type="text"
+                  class="settings-input-inline"
+                  :value="schedTimezone || detectedTimezone"
+                  :placeholder="detectedTimezone"
+                  @change="saveSchedPref('timezone', $event.target.value.trim() || detectedTimezone)"
+                  aria-label="Timezone"
+                >
+              </div>
+              <div class="settings-row">
+                <span class="settings-row-label">Working hours</span>
+                <div class="time-range">
+                  <input type="time" class="settings-time-input" :value="schedWorkStart" @change="saveSchedPref('work_start_time', $event.target.value)" aria-label="Work day start">
+                  <span class="time-range-sep">–</span>
+                  <input type="time" class="settings-time-input" :value="schedWorkEnd" @change="saveSchedPref('work_end_time', $event.target.value)" aria-label="Work day end">
+                </div>
+              </div>
+              <div class="settings-row">
+                <span class="settings-row-label">Working days</span>
+                <div class="day-picker" role="group" aria-label="Working days">
+                  <button
+                    v-for="(day, idx) in [{ n: 'Mo', v: 1 }, { n: 'Tu', v: 2 }, { n: 'We', v: 3 }, { n: 'Th', v: 4 }, { n: 'Fr', v: 5 }, { n: 'Sa', v: 6 }, { n: 'Su', v: 7 }]"
+                    :key="day.v"
+                    class="day-chip"
+                    :class="{ active: schedWorkDays.includes(day.v) }"
+                    :aria-pressed="schedWorkDays.includes(day.v)"
+                    @click="toggleWorkDay(day.v)"
+                  >{{ day.n }}</button>
+                </div>
+              </div>
+              <div class="settings-row">
+                <span class="settings-row-label">Default duration</span>
+                <select class="cal-select" :value="schedDuration" @change="saveSchedPref('default_task_duration_minutes', Number($event.target.value))">
+                  <option :value="15">15 min</option>
+                  <option :value="30">30 min</option>
+                  <option :value="45">45 min</option>
+                  <option :value="60">1 hour</option>
+                  <option :value="90">1.5 hours</option>
+                  <option :value="120">2 hours</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
           <!-- ── MCP Server ── -->
           <div id="settings-mcp" class="settings-section">
             <div class="settings-section-title">MCP Server</div>
@@ -445,6 +499,7 @@ import { useSidebar } from '../composables/useSidebar.js'
 import { useTheme } from '../composables/useTheme.js'
 import { useAccentColor } from '../composables/useAccentColor.js'
 import { useSchedulePrefs } from '../composables/useSchedulePrefs.js'
+import { useSettingsStore } from '../stores/settings.js'
 import { registerPasskey, listPasskeys, deletePasskey, isPasskeySupported } from '../lib/passkey.js'
 import AppSidebar from '../components/AppSidebar.vue'
 import AppTabbar from '../components/AppTabbar.vue'
@@ -452,6 +507,32 @@ import AppTabbar from '../components/AppTabbar.vue'
 const boardStore = useBoardStore()
 const reviewsStore = useReviewsStore()
 const calStore = useCalendarStore()
+
+const settingsStore = useSettingsStore()
+
+// ── Scheduling preferences ──
+const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+const schedTimezone  = ref('')
+const schedWorkStart = ref('09:00')
+const schedWorkEnd   = ref('17:00')
+const schedWorkDays  = ref([1, 2, 3, 4, 5])
+const schedDuration  = ref(60)
+
+async function saveSchedPref(key, value) {
+  if (key === 'timezone')                      schedTimezone.value  = value
+  if (key === 'work_start_time')               schedWorkStart.value = value
+  if (key === 'work_end_time')                 schedWorkEnd.value   = value
+  if (key === 'default_task_duration_minutes') schedDuration.value  = value
+  await settingsStore.save(key, value)
+}
+
+async function toggleWorkDay(day) {
+  const days = schedWorkDays.value.includes(day)
+    ? schedWorkDays.value.filter(d => d !== day)
+    : [...schedWorkDays.value, day].sort((a, b) => a - b)
+  schedWorkDays.value = days
+  await settingsStore.save('work_days', days)
+}
 
 // ── Google Calendar ──
 const hasBakedClientId = !!import.meta.env.VITE_GCAL_CLIENT_ID
@@ -700,6 +781,12 @@ onMounted(async () => {
   loadDisplayName()
   loadPasskeys()
   loadMcpToken()
+  const s = await settingsStore.load()
+  if (s.timezone)                      schedTimezone.value  = s.timezone
+  if (s.work_start_time)               schedWorkStart.value = s.work_start_time
+  if (s.work_end_time)                 schedWorkEnd.value   = s.work_end_time
+  if (s.work_days)                     schedWorkDays.value  = s.work_days
+  if (s.default_task_duration_minutes) schedDuration.value  = s.default_task_duration_minutes
 })
 
 onUnmounted(() => {
