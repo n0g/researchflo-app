@@ -610,20 +610,13 @@ export const useCalendarStore = defineStore('calendar', () => {
 
       const sourceId = caldavHrefToSourceId.get(calId)
       if (sourceId) {
-        // CalDAV: fetch events in a narrow window around scheduled_at to check existence
-        const anchor = task.scheduled_at ? new Date(task.scheduled_at) : new Date()
-        const timeMin = new Date(anchor.getTime() - 24 * 60 * 60_000).toISOString()
-        const timeMax = new Date(anchor.getTime() + 24 * 60 * 60_000).toISOString()
+        const eventHref = calId.endsWith('/') ? `${calId}${eventId}.ics` : `${calId}/${eventId}.ics`
         try {
-          const result = await _caldavProxy('get_events', { source_id: sourceId, cal_href: calId, time_min: timeMin, time_max: timeMax })
-          const found = (result.events || []).some(e => e.uid === eventId)
-          if (!found) await boardStore.clearScheduledTime(task.id)
-          else {
-            const ev = result.events.find(e => e.uid === eventId)
-            const calIso = new Date(ev.start).toISOString()
-            const savedIso = task.scheduled_at ? new Date(task.scheduled_at).toISOString() : null
-            if (calIso !== savedIso) await boardStore.saveScheduledTime(task.id, calIso)
-          }
+          const result = await _caldavProxy('get_event', { source_id: sourceId, event_href: eventHref })
+          if (!result.found) { await boardStore.clearScheduledTime(task.id); return }
+          const calIso = new Date(result.event.start).toISOString()
+          const savedIso = task.scheduled_at ? new Date(task.scheduled_at).toISOString() : null
+          if (calIso !== savedIso) await boardStore.saveScheduledTime(task.id, calIso)
         } catch { /* network error — skip, don't clear */ }
         return
       }

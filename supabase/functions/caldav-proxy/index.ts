@@ -125,6 +125,19 @@ Deno.serve(async (req) => {
         return json({ ok: true })
       }
 
+      case 'get_event': {
+        const { event_href } = body
+        if (!event_href) return json({ error: 'Missing event_href' }, 400)
+        const res = await caldavRequest(event_href, 'GET', creds.username, creds.password)
+        if (res.status === 404 || res.status === 410) return json({ found: false })
+        if (!res.ok) return json({ error: `GET failed: ${res.status}` }, res.status)
+        const ics = await res.text()
+        const { parseVEvents } = await import('../_shared/caldav.ts')
+        const events = parseVEvents(ics)
+        if (!events.length) return json({ found: false })
+        return json({ found: true, event: events[0] })
+      }
+
       default:
         return json({ error: `Unknown action: ${action}` }, 400)
     }
