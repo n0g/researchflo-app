@@ -20,6 +20,7 @@ const DEFS = [
   { key: 'tomorrow',    label: 'Tomorrow' },
   { key: 'thisWeek',    label: 'Rest of week' },
   { key: 'nextWeek',    label: 'Next week' },
+  { key: 'later',       label: 'Later' },
   { key: 'unscheduled', label: 'Unscheduled' },
 ]
 
@@ -34,7 +35,7 @@ export function useRelativeDateGroups(tasks, getScheduledIso) {
     const thisWeekEnd      = getMonday(todayStart);   thisWeekEnd.setDate(thisWeekEnd.getDate() + 7)
     const nextWeekEnd      = new Date(thisWeekEnd);   nextWeekEnd.setDate(nextWeekEnd.getDate() + 7)
 
-    const buckets = { overdue: [], today: [], tomorrow: [], thisWeek: [], nextWeek: [], unscheduled: [] }
+    const buckets = { overdue: [], today: [], tomorrow: [], thisWeek: [], nextWeek: [], later: [], unscheduled: [] }
 
     for (const task of taskList) {
       const iso = getScheduledIso(task)
@@ -46,6 +47,7 @@ export function useRelativeDateGroups(tasks, getScheduledIso) {
       else if (day.getTime() === tomorrowStart.getTime())  buckets.tomorrow.push({ task, t: d.getTime() })
       else if (day >= dayAfterTomorrow && day < thisWeekEnd) buckets.thisWeek.push({ task, t: d.getTime() })
       else if (day >= thisWeekEnd && day < nextWeekEnd)    buckets.nextWeek.push({ task, t: d.getTime() })
+      else if (day >= nextWeekEnd)                         buckets.later.push({ task, t: d.getTime() })
       else                                                 buckets.unscheduled.push({ task, t: d.getTime() })
     }
 
