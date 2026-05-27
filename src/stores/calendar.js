@@ -403,9 +403,65 @@ export const useCalendarStore = defineStore('calendar', () => {
       events.value = allEvents.sort(
         (a, b) => new Date(a.start?.dateTime || a.start?.date) - new Date(b.start?.dateTime || b.start?.date)
       )
+      _reconcileWeek(timeMin, timeMax).catch(() => {})
     } finally {
       loading.value = false
     }
+  }
+
+  async function _reconcileWeek(timeMin, timeMax) {
+    const boardStore = useBoardStore()
+    const weekTasks = boardStore.tasks.filter(t => {
+      if (t.is_completed || !t.caldav_event_uid || !t.scheduled_at) return false
+      const scheduled = new Date(t.scheduled_at)
+      return scheduled >= timeMin && scheduled <= timeMax
+    })
+    if (!weekTasks.length) return
+
+    const loadedUids = new Set(events.value.map(e => e.id))
+    const missing = weekTasks.filter(t => !loadedUids.has(t.caldav_event_uid))
+    if (!missing.length) return
+
+    const caldavHrefToSourceId = new Map()
+    for (const [sourceId, cals] of Object.entries(caldavCalendars.value)) {
+      for (const cal of cals) caldavHrefToSourceId.set(cal.href, sourceId)
+    }
+
+    await Promise.allSettled(missing.map(async task => {
+      const calId = task.caldav_calendar_id
+      const eventId = task.caldav_event_uid
+      if (!calId || !eventId) { await boardStore.clearScheduledTime(task.id); return }
+
+      const sourceId = caldavHrefToSourceId.get(calId)
+      if (sourceId) {
+        const eventHref = calId.endsWith('/') ? `${calId}${eventId}.ics` : `${calId}/${eventId}.ics`
+        try {
+          const result = await _caldavProxy('get_event', { source_id: sourceId, event_href: eventHref })
+          if (!result.found) { await boardStore.clearScheduledTime(task.id); return }
+          const calIso = new Date(result.event.start).toISOString()
+          const savedIso = task.scheduled_at ? new Date(task.scheduled_at).toISOString() : null
+          if (calIso !== savedIso) await boardStore.saveScheduledTime(task.id, calIso)
+        } catch { /* network error — skip, don't clear */ }
+        return
+      }
+
+      // Google Calendar
+      const token = await _ensureToken()
+      if (!token) return
+      try {
+        const res = await fetch(
+          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${encodeURIComponent(eventId)}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        )
+        if (res.status === 404 || res.status === 410) { await boardStore.clearScheduledTime(task.id); return }
+        if (!res.ok) return
+        const ev = await res.json()
+        if (!ev.start?.dateTime) return
+        const calIso = new Date(ev.start.dateTime).toISOString()
+        const savedIso = task.scheduled_at ? new Date(task.scheduled_at).toISOString() : null
+        if (calIso !== savedIso) await boardStore.saveScheduledTime(task.id, calIso)
+      } catch { /* network error — skip */ }
+    }))
   }
 
   function buildEventDescription(task, projectName) {

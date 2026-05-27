@@ -898,10 +898,9 @@ onMounted(async () => {
   nowTimer = setInterval(() => { nowMinutes.value = getNowMinutes() }, 600000)
   f7.on('pageAfterIn', _onF7PageAfterIn)
   store.initStages()
-  const reloaded = await store.loadIfStale()
+  await store.loadIfStale()
   if (calStore.isConnected) {
     calStore.loadWeekEvents(weekStart.value)
-    if (reloaded) calStore.reconcileScheduledTasks()
     await nextTick()
     if (calBodyEl.value) calBodyEl.value.scrollTop = SLOT_HEIGHT * 2
   }
