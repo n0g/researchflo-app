@@ -47,12 +47,11 @@ BEGIN
   RETURN NEW;
 END; $$;
 
--- Keeps profiles.email and people.email in sync when auth email changes.
+-- Keeps people.email in sync when auth email changes.
 CREATE OR REPLACE FUNCTION public.sync_email_on_auth_update()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
 BEGIN
   IF NEW.email IS DISTINCT FROM OLD.email THEN
-    UPDATE public.profiles SET email = NEW.email WHERE id = NEW.id;
     UPDATE public.people SET email = NEW.email WHERE user_id = NEW.id;
   END IF;
   RETURN NEW;
@@ -107,14 +106,6 @@ BEGIN
 END; $$;
 
 -- ── TABLES ────────────────────────────────────────────────────
-
--- Mirrors auth.users for public profile lookups.
-CREATE TABLE public.profiles (
-  id           uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  display_name text,
-  email        text,
-  created_at   timestamptz DEFAULT now()
-);
 
 -- Pipeline stages. System defaults have owner_id IS NULL and are visible to all users.
 CREATE TABLE public.stages (
@@ -313,7 +304,6 @@ CREATE TRIGGER on_auth_user_deleted
 
 -- ── ROW LEVEL SECURITY ─────────────────────────────────────────
 
-ALTER TABLE public.profiles              ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.stages                ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.projects              ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.people                ENABLE ROW LEVEL SECURITY;
@@ -326,12 +316,6 @@ ALTER TABLE public.auth_challenges       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.passkeys              ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_settings         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.calendar_sources      ENABLE ROW LEVEL SECURITY;
-
--- profiles: readable by all authenticated users; writable only by owner
-CREATE POLICY "profiles_select" ON public.profiles
-  FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "profiles_own" ON public.profiles
-  FOR ALL USING (id = auth.uid()) WITH CHECK (id = auth.uid());
 
 -- stages: system defaults (owner_id IS NULL) + user's own custom stages
 CREATE POLICY "stages_select" ON public.stages
