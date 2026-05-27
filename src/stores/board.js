@@ -157,7 +157,9 @@ export const useBoardStore = defineStore('board', () => {
     const TEN_MIN = 10 * 60 * 1000
     if (!lastUpdated.value || Date.now() - lastUpdated.value.getTime() > TEN_MIN) {
       await loadData()
+      return true
     }
+    return false
   }
 
   async function loadData() {
