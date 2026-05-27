@@ -239,7 +239,7 @@
                         class="cal-event"
                         :class="{
                           'cal-event-moving': draggingCalEvent?.id === ev.id,
-                          'cal-event-readonly': ev._calId !== calStore.selectedCalendarId,
+                          'cal-event-readonly': ev._calId !== calStore.targetCalHref,
                           'cal-event-unlinked': isUnlinked(ev),
                           'cal-event-other-cal': isOtherCal(ev),
                         }"
@@ -567,11 +567,11 @@ const importingEvent = ref(null)
 const importing = ref(false)
 
 function isUnlinked(ev) {
-  return !calStore.taskIdByEventUid.has(ev.id) && ev._calId === calStore.selectedCalendarId
+  return !calStore.taskIdByEventUid.has(ev.id) && ev._calId === calStore.targetCalHref
 }
 
 function isOtherCal(ev) {
-  return ev._calId !== calStore.selectedCalendarId
+  return ev._calId !== calStore.targetCalHref
 }
 
 function importEventTimeStr(ev) {
@@ -719,7 +719,7 @@ function onCalEventPointerDown(e, ev) {
     importingEvent.value = ev
     return
   }
-  if (ev._calId !== calStore.selectedCalendarId) return
+  if (ev._calId !== calStore.targetCalHref) return
   // Phone: no drag support on small screens; skip to avoid stuck listener state
   if (e.pointerType === 'touch' && window.innerWidth < 768) return
   e.preventDefault()

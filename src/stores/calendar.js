@@ -64,6 +64,14 @@ export const useCalendarStore = defineStore('calendar', () => {
     return [...gcal, ...caldav]
   })
 
+  // The _calId to compare against for "is this event on the write-target calendar?"
+  const targetCalHref = computed(() => {
+    const t = selectedTargetId.value
+    if (t.startsWith(`caldav${SEP}`)) return t.split(SEP)[2] ?? ''
+    if (t.startsWith(`google${SEP}`)) return t.slice(`google${SEP}`.length)
+    return selectedCalendarId.value
+  })
+
   // Task → event: keyed by task ID, value is the matching loaded event (if visible this week)
   const scheduledByTaskId = computed(() => {
     const boardStore = useBoardStore()
@@ -643,7 +651,7 @@ export const useCalendarStore = defineStore('calendar', () => {
   async function checkConnection() { await _ensureToken() }
 
   return {
-    clientId, events, loading, connectError, selectedCalendarId, selectedTargetId,
+    clientId, events, loading, connectError, selectedCalendarId, selectedTargetId, targetCalHref,
     calendarList, writableCalendars, allCalendars, isConnected, scheduledByTaskId, taskIdByEventUid,
     caldavSources, caldavCalendars, caldavConnecting, caldavError,
     saveClientId, saveCalendarId, saveTargetId, connect, disconnect, init, checkConnection,
