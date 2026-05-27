@@ -450,7 +450,7 @@ export const useCalendarStore = defineStore('calendar', () => {
         _calColor: calColor, _calId: calHref, _sourceType: 'caldav', _sourceId: sourceId,
       }
       events.value.push(ev)
-      useBoardStore().saveGCalEvent(task.id, uid, calHref).catch(() => {})
+      await useBoardStore().saveGCalEvent(task.id, uid, calHref)
       return ev
     }
 
@@ -472,7 +472,7 @@ export const useCalendarStore = defineStore('calendar', () => {
     const event = await res.json()
     const calColor = calendarList.value.find(c => c.id === googleCalId)?.backgroundColor ?? null
     events.value.push({ ...event, _calColor: calColor, _calId: googleCalId, _sourceType: 'google' })
-    useBoardStore().saveGCalEvent(task.id, event.id, googleCalId).catch(() => {})
+    await useBoardStore().saveGCalEvent(task.id, event.id, googleCalId)
     return event
   }
 
