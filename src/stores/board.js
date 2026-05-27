@@ -598,6 +598,7 @@ export const useBoardStore = defineStore('board', () => {
       .update({ is_completed: true, completed_at: new Date().toISOString() })
       .eq('id', taskId)
     if (error) throw new Error(error.message)
+    await useCalendarStore().deleteAllByTaskId(taskId).catch(() => {})
     tasks.value = tasks.value.filter(t => t.id !== taskId)
   }
 
