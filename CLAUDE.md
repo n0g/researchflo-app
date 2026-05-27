@@ -128,7 +128,9 @@ All tables have RLS enabled. Key tables:
 - `(project_id, person_id)` PK, `role` ('owner'/'member'), `added_by`, `added_at`
 
 **`tasks`**
-- `id`, `project_id`, `created_by`, `assigned_to`, `content`, `description`, `priority` (1–4), `due_date`, `sort_order`, `is_completed`, `is_private`, `completed_at`
+- `id`, `project_id`, `created_by`, `content`, `description`, `priority` (1–4), `due_date`, `sort_order`, `is_completed`, `is_private`, `completed_at`
+- `assigned_to` — uuid FK → `people.id` (nullable; person may not have an account yet)
+- `estimated_time` — integer, minutes (nullable)
 - `caldav_event_uid` — linked calendar event UID
 - `caldav_calendar_id` — calendar href where the event lives
 - `scheduled_at` — scheduled datetime (mirrors the event start)
