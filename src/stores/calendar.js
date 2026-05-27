@@ -403,9 +403,7 @@ export const useCalendarStore = defineStore('calendar', () => {
   function buildEventDescription(task, projectName) {
     const parts = []
     if (projectName) parts.push(`Project: ${projectName}`)
-    const notes = (task.description ?? '').split('\n')
-      .filter(l => !l.startsWith('📅 Scheduled:') && !l.startsWith('📅 GCal:'))
-      .join('\n').trim()
+    const notes = (task.description ?? '').trim()
     if (notes) parts.push(notes)
     if (task.project_id) {
       const base = `${window.location.origin}${import.meta.env.BASE_URL}`
@@ -497,23 +495,9 @@ export const useCalendarStore = defineStore('calendar', () => {
     }))
   }
 
-  function _parseGCalLine(task) {
-    const line = (task.description || '').split('\n').find(l => l.startsWith('📅 GCal:'))
-    if (!line) return null
-    const parts = line.slice('📅 GCal: '.length).split('|')
-    return parts.length === 2 ? { eventId: parts[0], calId: parts[1] } : null
-  }
-
   async function syncEventForTask(task, projectName) {
     const token = await _ensureToken()
     if (!token) { _queueTaskSync(task.id); return }
-    const stored = _parseGCalLine(task)
-    if (stored) {
-      const memEv = events.value.find(e => e.id === stored.eventId)
-      await _patchEvents([memEv || { id: stored.eventId, _calId: stored.calId }], task, projectName)
-      _dequeueTaskSync(task.id)
-      return
-    }
     const evs = scheduledByTaskId.value.get(String(task.id)) || []
     if (!evs.length) { _dequeueTaskSync(task.id); return }
     await _patchEvents(evs, task, projectName)
@@ -529,46 +513,8 @@ export const useCalendarStore = defineStore('calendar', () => {
     await Promise.allSettled([...q].map(async taskId => {
       const task = boardStore.tasks.find(t => t.id === taskId)
       if (!task) { _dequeueTaskSync(taskId); return }
-      const stored = _parseGCalLine(task)
       const projectName = boardStore.projects.find(p => p.id === task.project_id)?.name ?? ''
-      if (stored) {
-        const getRes = await fetch(
-          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(stored.calId)}/events/${encodeURIComponent(stored.eventId)}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        )
-        if (getRes.ok) {
-          const ev = await getRes.json()
-          const calUpdated = ev.updated ? new Date(ev.updated).getTime() : 0
-          const taskUpdated = task.updated_at ? new Date(task.updated_at).getTime() : 0
-          const patch = { description: buildEventDescription(task, projectName) }
-          if (taskUpdated >= calUpdated) patch.summary = task.content
-          const patchRes = await fetch(
-            `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(stored.calId)}/events/${encodeURIComponent(stored.eventId)}`,
-            { method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(patch) }
-          )
-          if (patchRes.ok) {
-            const updated = await patchRes.json()
-            const idx = events.value.findIndex(e => e.id === stored.eventId)
-            if (idx !== -1) events.value[idx] = { ...events.value[idx], ...updated }
-          }
-        }
-        _dequeueTaskSync(taskId)
-        return
-      }
-      const cals = calendarList.value.length
-        ? calendarList.value.filter(c => c.accessRole === 'writer' || c.accessRole === 'owner')
-        : [{ id: selectedCalendarId.value }]
-      const evs = []
-      await Promise.allSettled(cals.map(async cal => {
-        const params = new URLSearchParams({ privateExtendedProperty: `todoist_task_id=${taskId}`, singleEvents: 'true', maxResults: '10' })
-        const res = await fetch(
-          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?${params}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        )
-        if (!res.ok) return
-        const data = await res.json()
-        for (const ev of (data.items || [])) evs.push({ ...ev, _calId: cal.id })
-      }))
+      const evs = scheduledByTaskId.value.get(String(taskId)) || []
       if (evs.length) await _patchEvents(evs, task, projectName)
       _dequeueTaskSync(taskId)
     }))
@@ -650,12 +596,13 @@ export const useCalendarStore = defineStore('calendar', () => {
     const token = await _ensureToken()
     if (!token) return
     const boardStore = useBoardStore()
-    const scheduledTasks = boardStore.tasks.filter(t => !t.is_completed && (t.description || '').includes('📅 GCal:'))
+    const scheduledTasks = boardStore.tasks.filter(t => !t.is_completed && t.caldav_event_uid)
     await Promise.allSettled(scheduledTasks.map(async task => {
-      const stored = _parseGCalLine(task)
-      if (!stored) return
+      const calId = task.caldav_calendar_id
+      const eventId = task.caldav_event_uid
+      if (!calId || !eventId) return
       const res = await fetch(
-        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(stored.calId)}/events/${encodeURIComponent(stored.eventId)}`,
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${encodeURIComponent(eventId)}`,
         { headers: { Authorization: `Bearer ${token}` } }
       )
       if (res.status === 404 || res.status === 410) { await boardStore.clearScheduledTime(task.id); return }
@@ -663,9 +610,7 @@ export const useCalendarStore = defineStore('calendar', () => {
       const ev = await res.json()
       if (!ev.start?.dateTime) return
       const calIso = new Date(ev.start.dateTime).toISOString()
-      const descLine = (task.description || '').split('\n').find(l => l.startsWith('📅 Scheduled:'))
-      const m = descLine?.match(/\(([^)]+)\)$/)
-      const savedIso = m ? m[1] : null
+      const savedIso = task.scheduled_at ? new Date(task.scheduled_at).toISOString() : null
       if (calIso !== savedIso) await boardStore.saveScheduledTime(task.id, calIso)
     }))
   }
