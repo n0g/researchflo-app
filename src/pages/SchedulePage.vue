@@ -331,7 +331,8 @@ const allTasks = computed(() => {
   return store.tasks.filter(t =>
     !t.is_completed &&
     (t.project_id === null || projectSet.has(t.project_id)) &&
-    !store.excludedSectionIds.has(t.section_id)
+    !store.excludedSectionIds.has(t.section_id) &&
+    (t.assigned_to === null || t.assigned_to === store.myPeopleId)
   )
 })
 
