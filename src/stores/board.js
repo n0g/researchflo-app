@@ -619,10 +619,6 @@ export const useBoardStore = defineStore('board', () => {
   }
 
   async function deleteTask(taskId) {
-    const task = tasks.value.find(t => t.id === taskId)
-    if (task?.caldav_event_uid) {
-      useCalendarStore().unlinkTaskFromEvent(task.caldav_event_uid, task.caldav_calendar_id).catch(console.error)
-    }
     const { error } = await supabase.from('tasks').delete().eq('id', taskId)
     if (error) throw new Error(error.message)
     tasks.value = tasks.value.filter(t => t.id !== taskId)

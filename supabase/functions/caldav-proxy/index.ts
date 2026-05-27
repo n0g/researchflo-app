@@ -81,13 +81,13 @@ Deno.serve(async (req) => {
       }
 
       case 'create_event': {
-        const { cal_href, uid, summary, description, start_iso, end_iso, task_id } = body
+        const { cal_href, uid, summary, description, start_iso, end_iso } = body
         if (!cal_href || !uid || !summary || !start_iso) {
           return json({ error: 'Missing cal_href, uid, summary, or start_iso' }, 400)
         }
         const start = new Date(start_iso)
         const end = end_iso ? new Date(end_iso) : new Date(start.getTime() + 60 * 60_000)
-        const icsData = buildICS(uid, summary, description ?? '', start, end, task_id)
+        const icsData = buildICS(uid, summary, description ?? '', start, end)
         const putUrl = cal_href.endsWith('/') ? `${cal_href}${uid}.ics` : `${cal_href}/${uid}.ics`
         const res = await caldavRequest(putUrl, 'PUT', creds.username, creds.password, icsData, {
           'Content-Type': 'text/calendar; charset=utf-8',
@@ -100,14 +100,14 @@ Deno.serve(async (req) => {
       }
 
       case 'update_event': {
-        const { event_href, uid, summary, description, start_iso, end_iso, task_id, etag } = body
+        const { event_href, uid, summary, description, start_iso, end_iso, etag } = body
         if (!event_href || !summary || !start_iso) {
           return json({ error: 'Missing event_href, summary, or start_iso' }, 400)
         }
         const start = new Date(start_iso)
         const end = end_iso ? new Date(end_iso) : new Date(start.getTime() + 60 * 60_000)
         const resolvedUid = uid || event_href.split('/').pop()?.replace('.ics', '') || 'event'
-        const icsData = buildICS(resolvedUid, summary, description ?? '', start, end, task_id)
+        const icsData = buildICS(resolvedUid, summary, description ?? '', start, end)
         const extra: Record<string, string> = { 'Content-Type': 'text/calendar; charset=utf-8' }
         if (etag) extra['If-Match'] = etag
         const res = await caldavRequest(event_href, 'PUT', creds.username, creds.password, icsData, extra)

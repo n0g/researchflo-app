@@ -268,7 +268,7 @@
               <template v-if="caldavType === 'icloud'">
                 <p class="settings-hint" style="margin-bottom: 10px">
                   Requires an <strong>app-specific password</strong> — not your Apple ID password.<br>
-                  Generate one at <em>appleid.apple.com → Sign-In and Security → App-Specific Passwords</em>.
+                  Generate one at <em>account.apple.com → Sign-In and Security → App-Specific Passwords</em>.
                 </p>
                 <input type="email" v-model="caldavUsername" placeholder="Apple ID email" aria-label="Apple ID email">
                 <input type="password" v-model="caldavPassword" placeholder="App-specific password" aria-label="App-specific password" style="margin-top: 8px">

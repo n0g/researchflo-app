@@ -113,7 +113,6 @@ export interface CalDAVEvent {
   start: string    // ISO 8601
   end: string      // ISO 8601
   isAllDay: boolean
-  taskId: string | null
 }
 
 function unfold(ics: string): string {
@@ -160,7 +159,6 @@ export function parseVEvents(icsText: string): CalDAVEvent[] {
       start: dtstart.iso,
       end: dtend.iso,
       isAllDay: dtstart.isAllDay,
-      taskId: props['X-RESEARCHBOARD-TASK-ID']?.value ?? null,
     })
   }
 
@@ -327,7 +325,6 @@ export function buildICS(
   description: string,
   start: Date,
   end: Date,
-  taskId?: string,
 ): string {
   const fmt = (d: Date) => d.toISOString().replace(/[-:.]/g, '').replace(/\d{3}Z$/, 'Z')
   const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;')
@@ -345,7 +342,6 @@ export function buildICS(
     `SUMMARY:${esc(summary)}`,
   ]
   if (description) lines.push(`DESCRIPTION:${esc(description)}`)
-  if (taskId) lines.push(`X-RESEARCHBOARD-TASK-ID:${taskId}`)
   lines.push('END:VEVENT', 'END:VCALENDAR')
   return lines.join('\r\n')
 }

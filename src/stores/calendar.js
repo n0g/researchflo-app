@@ -64,14 +64,28 @@ export const useCalendarStore = defineStore('calendar', () => {
     return [...gcal, ...caldav]
   })
 
+  // Task → event: keyed by task ID, value is the matching loaded event (if visible this week)
   const scheduledByTaskId = computed(() => {
+    const boardStore = useBoardStore()
     const map = new Map()
-    for (const ev of events.value) {
-      const taskId = ev.extendedProperties?.private?.todoist_task_id
-      if (taskId) {
+    for (const task of boardStore.tasks) {
+      if (!task.caldav_event_uid) continue
+      const ev = events.value.find(e => e.id === task.caldav_event_uid)
+      if (ev) {
+        const taskId = String(task.id)
         if (!map.has(taskId)) map.set(taskId, [])
         map.get(taskId).push(ev)
       }
+    }
+    return map
+  })
+
+  // Event → task: keyed by event UID, value is task ID string
+  const taskIdByEventUid = computed(() => {
+    const boardStore = useBoardStore()
+    const map = new Map()
+    for (const task of boardStore.tasks) {
+      if (task.caldav_event_uid) map.set(task.caldav_event_uid, String(task.id))
     }
     return map
   })
@@ -368,7 +382,6 @@ export const useCalendarStore = defineStore('calendar', () => {
                   _calId: cal.href,
                   _sourceType: src.type,
                   _sourceId: src.id,
-                  extendedProperties: ev.taskId ? { private: { todoist_task_id: ev.taskId } } : undefined,
                 }))
               } catch { return [] }
             })
@@ -422,7 +435,6 @@ export const useCalendarStore = defineStore('calendar', () => {
         source_id: sourceId, cal_href: calHref, uid,
         summary: task.content, description: desc,
         start_iso: start.toISOString(), end_iso: end.toISOString(),
-        task_id: String(task.id),
       })
 
       const calColor = (caldavCalendars.value[sourceId] || []).find(c => c.href === calHref)?.color || null
@@ -430,7 +442,6 @@ export const useCalendarStore = defineStore('calendar', () => {
         id: uid, summary: task.content, description: desc,
         start: { dateTime: start.toISOString() }, end: { dateTime: end.toISOString() },
         _calColor: calColor, _calId: calHref, _sourceType: 'caldav', _sourceId: sourceId,
-        extendedProperties: { private: { todoist_task_id: String(task.id) } },
       }
       events.value.push(ev)
       useBoardStore().saveGCalEvent(task.id, uid, calHref).catch(() => {})
@@ -446,7 +457,6 @@ export const useCalendarStore = defineStore('calendar', () => {
       summary: task.content, description: desc,
       start: { dateTime: start.toISOString(), timeZone: tz },
       end: { dateTime: end.toISOString(), timeZone: tz },
-      extendedProperties: { private: { todoist_task_id: String(task.id) } },
     }
     const res = await fetch(
       `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(googleCalId)}/events`,
@@ -595,20 +605,17 @@ export const useCalendarStore = defineStore('calendar', () => {
   }
 
   async function deleteAllByTaskId(taskId) {
-    const token = await _ensureToken()
-    if (!token) return
-    const cals = calendarList.value.length
-      ? calendarList.value.filter(c => c.accessRole === 'writer' || c.accessRole === 'owner')
-      : [{ id: selectedCalendarId.value }]
-    await Promise.allSettled(cals.map(async cal => {
-      const params = new URLSearchParams({ privateExtendedProperty: `todoist_task_id=${taskId}`, singleEvents: 'true', maxResults: '50' })
-      const res = await fetch(
-        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?${params}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      )
-      if (!res.ok) return
-      const data = await res.json()
-      await Promise.allSettled((data.items || []).map(ev => deleteEvent(ev.id, cal.id)))
+    const evs = scheduledByTaskId.value.get(String(taskId)) || []
+    await Promise.allSettled(evs.map(async ev => {
+      if (!ev._sourceType || ev._sourceType === 'google') {
+        await deleteEvent(ev.id, ev._calId)
+      } else {
+        try {
+          const eventHref = ev._calId.endsWith('/') ? `${ev._calId}${ev.id}.ics` : `${ev._calId}/${ev.id}.ics`
+          await _caldavProxy('delete_event', { source_id: ev._sourceId, event_href: eventHref })
+          events.value = events.value.filter(e => e.id !== ev.id)
+        } catch {}
+      }
     }))
   }
 
@@ -630,27 +637,13 @@ export const useCalendarStore = defineStore('calendar', () => {
   }
 
   async function linkEventToTask(eventId, calId, taskId) {
-    const token = await _ensureToken()
-    if (!token) throw new Error('Not authenticated')
-    await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${eventId}`,
-      { method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ extendedProperties: { private: { todoist_task_id: String(taskId) } } }) }
-    )
-    const ev = events.value.find(e => e.id === eventId)
-    if (ev) {
-      if (!ev.extendedProperties) ev.extendedProperties = {}
-      if (!ev.extendedProperties.private) ev.extendedProperties.private = {}
-      ev.extendedProperties.private.todoist_task_id = String(taskId)
-    }
+    await useBoardStore().saveGCalEvent(taskId, eventId, calId)
   }
 
-  async function unlinkTaskFromEvent(eventId, calId) {
-    const token = await _ensureToken()
-    if (!token) return
-    await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${encodeURIComponent(eventId)}`,
-      { method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ extendedProperties: { private: { todoist_task_id: null } } }) }
-    )
+  async function unlinkTaskFromEvent(_eventId, _calId) {
+    // task_schedule row is cleaned up automatically:
+    // - on task delete: cascade from tasks FK
+    // - on unschedule: explicit clearScheduledTime call
   }
 
   async function reconcileScheduledTasks() {
@@ -683,7 +676,7 @@ export const useCalendarStore = defineStore('calendar', () => {
 
   return {
     clientId, events, loading, connectError, selectedCalendarId, selectedTargetId,
-    calendarList, writableCalendars, allCalendars, isConnected, scheduledByTaskId,
+    calendarList, writableCalendars, allCalendars, isConnected, scheduledByTaskId, taskIdByEventUid,
     caldavSources, caldavCalendars, caldavConnecting, caldavError,
     saveClientId, saveCalendarId, saveTargetId, connect, disconnect, init, checkConnection,
     loadWeekEvents, createEvent, deleteEvent, deleteAllByTaskId, updateEvent, updateEventTitle,

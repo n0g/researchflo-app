@@ -61,7 +61,7 @@
             <a v-if="seg.href" :href="seg.href" target="_blank" rel="noopener noreferrer" class="task-link" @click.stop>{{ seg.text }}</a>
             <template v-else>{{ seg.text }}</template>
           </template>
-          <i v-if="(task.labels || []).includes('scheduled')" class="ph ph-calendar-check task-cal-badge" aria-hidden="true"></i>
+          <i v-if="task.caldav_event_uid" class="ph ph-calendar-check task-cal-badge" aria-hidden="true"></i>
         </div>
         <input
           v-if="editingTitle"

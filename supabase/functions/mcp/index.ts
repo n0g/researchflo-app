@@ -765,7 +765,6 @@ async function callTool(name: string, args: any, userId: string, admin: Admin): 
         description: descParts.join('\n\n'),
         start: { dateTime: startDate.toISOString(), timeZone: tz },
         end:   { dateTime: endDate.toISOString(),   timeZone: tz },
-        extendedProperties: { private: { todoist_task_id: String(task.id) } },
       }
 
       const res = await fetch(
