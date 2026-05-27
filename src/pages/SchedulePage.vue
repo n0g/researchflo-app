@@ -347,7 +347,7 @@ const filteredTasks = computed(() => {
     : allTasks.value
   if (showUnscheduled.value) tasks = tasks.filter(t => !scheduledIso(t))
   switch (tab.value) {
-    case 'quick': return tasks.filter(t => getLabel(t, 'time::') === '15m')
+    case 'quick': return tasks.filter(t => t.estimated_time != null && t.estimated_time < 30)
     case 'assigned': return tasks.filter(t => t.assigned_to === store.myPeopleId)
     case 'focus': return tasks.filter(t => store.projectEnergy(t.project_id) === 2)
     default: return tasks
