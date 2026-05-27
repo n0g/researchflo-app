@@ -569,7 +569,7 @@ const importingEvent = ref(null)
 const importing = ref(false)
 
 function isUnlinked(ev) {
-  return !ev.extendedProperties?.private?.todoist_task_id && ev._calId === calStore.selectedCalendarId
+  return !calStore.taskIdByEventUid.has(ev.id) && ev._calId === calStore.selectedCalendarId
 }
 
 function isOtherCal(ev) {
