@@ -304,7 +304,7 @@ import { parseTaskContent } from '../lib/helpers.js'
 const TABS = [
   { key: 'all', label: 'All' },
   { key: 'quick', label: 'Quick' },
-  { key: 'social', label: 'Social' },
+  { key: 'assigned', label: 'Assigned' },
   { key: 'focus', label: 'Focus' },
 ]
 import AppSidebar from '../components/AppSidebar.vue'
@@ -348,7 +348,7 @@ const filteredTasks = computed(() => {
   if (showUnscheduled.value) tasks = tasks.filter(t => !scheduledIso(t))
   switch (tab.value) {
     case 'quick': return tasks.filter(t => getLabel(t, 'time::') === '15m')
-    case 'social': return tasks.filter(t => (t.labels || []).some(l => l.startsWith('person::')))
+    case 'assigned': return tasks.filter(t => t.assigned_to === store.myPeopleId)
     case 'focus': return tasks.filter(t => store.projectEnergy(t.project_id) === 2)
     default: return tasks
   }
