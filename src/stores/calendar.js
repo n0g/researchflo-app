@@ -593,14 +593,44 @@ export const useCalendarStore = defineStore('calendar', () => {
   }
 
   async function reconcileScheduledTasks() {
-    const token = await _ensureToken()
-    if (!token) return
     const boardStore = useBoardStore()
     const scheduledTasks = boardStore.tasks.filter(t => !t.is_completed && t.caldav_event_uid)
+    if (!scheduledTasks.length) return
+
+    // Build a lookup: calHref → sourceId for all known CalDAV calendars
+    const caldavHrefToSourceId = new Map()
+    for (const [sourceId, cals] of Object.entries(caldavCalendars.value)) {
+      for (const cal of cals) caldavHrefToSourceId.set(cal.href, sourceId)
+    }
+
     await Promise.allSettled(scheduledTasks.map(async task => {
       const calId = task.caldav_calendar_id
       const eventId = task.caldav_event_uid
       if (!calId || !eventId) return
+
+      const sourceId = caldavHrefToSourceId.get(calId)
+      if (sourceId) {
+        // CalDAV: fetch events in a narrow window around scheduled_at to check existence
+        const anchor = task.scheduled_at ? new Date(task.scheduled_at) : new Date()
+        const timeMin = new Date(anchor.getTime() - 24 * 60 * 60_000).toISOString()
+        const timeMax = new Date(anchor.getTime() + 24 * 60 * 60_000).toISOString()
+        try {
+          const result = await _caldavProxy('get_events', { source_id: sourceId, cal_href: calId, time_min: timeMin, time_max: timeMax })
+          const found = (result.events || []).some(e => e.uid === eventId)
+          if (!found) await boardStore.clearScheduledTime(task.id)
+          else {
+            const ev = result.events.find(e => e.uid === eventId)
+            const calIso = new Date(ev.start).toISOString()
+            const savedIso = task.scheduled_at ? new Date(task.scheduled_at).toISOString() : null
+            if (calIso !== savedIso) await boardStore.saveScheduledTime(task.id, calIso)
+          }
+        } catch { /* network error — skip, don't clear */ }
+        return
+      }
+
+      // Google Calendar
+      const token = await _ensureToken()
+      if (!token) return
       const res = await fetch(
         `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${encodeURIComponent(eventId)}`,
         { headers: { Authorization: `Bearer ${token}` } }
