@@ -383,9 +383,7 @@ function scheduleTaskByKey(task) {
 function scheduledIso(task) {
   const ev = calStore.scheduledByTaskId.get(task.id)?.[0]
   if (ev?.start?.dateTime) return new Date(ev.start.dateTime).toISOString()
-  const line = (task.description || '').split('\n').find(l => l.startsWith('📅 Scheduled:'))
-  const m = line?.match(/\(([^)]+)\)$/)
-  return m ? m[1] : null
+  return task.scheduled_at ?? null
 }
 
 function isOverdue(task) {
@@ -594,10 +592,7 @@ async function importEventAsTask() {
     const isoDatetime = ev.start.dateTime || (ev.start.date + 'T09:00:00')
     const d = new Date(isoDatetime)
     const hour12 = schedPrefs.timeFormat.value !== '24h'
-    const readable = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) +
-      ' at ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12 })
-    const scheduledLine = `📅 Scheduled: ${readable} (${isoDatetime})`
-    const task = await store.addInboxTask(ev.summary, scheduledLine)
+    const task = await store.addInboxTask(ev.summary, '')
     await calStore.linkEventToTask(ev.id, ev._calId, task.id)
     importingEvent.value = null
   } finally {
@@ -861,9 +856,7 @@ watch(() => calStore.scheduledByTaskId, async (map) => {
     if (!task) continue
 
     const calIso = new Date(ev.start.dateTime).toISOString()
-    const descLine = (task.description || '').split('\n').find(l => l.startsWith('📅 Scheduled:'))
-    const m = descLine?.match(/\(([^)]+)\)$/)
-    const savedIso = m ? m[1] : null
+    const savedIso = task.scheduled_at ? new Date(task.scheduled_at).toISOString() : null
     if (calIso !== savedIso) {
       await store.saveScheduledTime(taskId, calIso)
     }
