@@ -363,6 +363,7 @@ const taskFlatIndex = computed(() => {
 })
 
 function projectName(task) {
+  if (task.project_id === null) return 'Inbox'
   return store.displayProjects.find(p => p.id === task.project_id)?.name ?? ''
 }
 
