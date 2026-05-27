@@ -231,12 +231,12 @@ export const useCalendarStore = defineStore('calendar', () => {
 
   async function init() {
     const params = new URLSearchParams(window.location.search)
-    const isGCalCallback = params.has('code') && !!sessionStorage.getItem('gcal_csrf')
+    const isGCalCallback = params.has('code') && !!localStorage.getItem('gcal_csrf')
     if (isGCalCallback) {
       const code = params.get('code')
       const returnedState = params.get('state')
-      const expectedCsrf = sessionStorage.getItem('gcal_csrf')
-      sessionStorage.removeItem('gcal_csrf')
+      const expectedCsrf = localStorage.getItem('gcal_csrf')
+      localStorage.removeItem('gcal_csrf')
       window.history.replaceState({}, '', window.location.pathname)
       if (expectedCsrf && returnedState !== expectedCsrf) {
         connectError.value = 'csrf_mismatch'
@@ -274,7 +274,7 @@ export const useCalendarStore = defineStore('calendar', () => {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) { connectError.value = 'Not signed in'; return }
     const csrf = crypto.randomUUID()
-    sessionStorage.setItem('gcal_csrf', csrf)
+    localStorage.setItem('gcal_csrf', csrf)
     const p = new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID,
       redirect_uri: GCAL_REDIRECT_URI,
