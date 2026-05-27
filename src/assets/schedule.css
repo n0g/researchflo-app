@@ -461,8 +461,8 @@ html[data-theme="dark"] .seg-btn.active { background: rgba(255,255,255,0.15); }
 
 /* Left pane: task list */
 .schedule-list {
-  width: 320px;
-  min-width: 320px;
+  width: 340px;
+  min-width: 340px;
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
