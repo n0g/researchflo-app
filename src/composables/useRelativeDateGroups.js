@@ -26,10 +26,10 @@ const DEFS = [
 
 // tasks: ref<Task[]> or Task[]
 // getScheduledIso: (task) => ISO string | null
-export function useRelativeDateGroups(tasks, getScheduledIso) {
+export function useRelativeDateGroups(tasks, getScheduledIso, today) {
   return computed(() => {
     const taskList = unref(tasks)
-    const todayStart       = startOfDay(new Date())
+    const todayStart       = startOfDay(unref(today) ?? new Date())
     const tomorrowStart    = new Date(todayStart);    tomorrowStart.setDate(tomorrowStart.getDate() + 1)
     const dayAfterTomorrow = new Date(tomorrowStart); dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 1)
     const thisWeekEnd      = getMonday(todayStart);   thisWeekEnd.setDate(thisWeekEnd.getDate() + 7)

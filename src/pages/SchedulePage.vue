@@ -354,7 +354,7 @@ const filteredTasks = computed(() => {
   }
 })
 
-const taskGroups = useRelativeDateGroups(filteredTasks, scheduledIso)
+const taskGroups = useRelativeDateGroups(filteredTasks, scheduledIso, nowDate)
 
 const taskFlatIndex = computed(() => {
   const map = new Map()
@@ -477,7 +477,7 @@ const monthLabel = computed(() => {
 function isoDate(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 }
-function isToday(d) { return isoDate(d) === isoDate(new Date()) }
+function isToday(d) { return isoDate(d) === isoDate(nowDate.value) }
 function dayName(d) { return d.toLocaleDateString(undefined, { weekday: 'short' }) }
 
 function formatHour(h) {
@@ -877,11 +877,11 @@ watch(() => calStore.scheduledByTaskId, async (map) => {
 })
 
 // ── Current time indicator ──
-const nowMinutes = ref(getNowMinutes())
-function getNowMinutes() {
-  const n = new Date()
+const nowDate = ref(new Date())
+const nowMinutes = computed(() => {
+  const n = nowDate.value
   return Math.round((n.getHours() * 60 + n.getMinutes()) / 15) * 15
-}
+})
 let nowTimer = null
 const nowTop = computed(() => {
   const todayInWeek = weekDays.value.some(d => isToday(d))
@@ -897,7 +897,7 @@ const nowLineLeft = computed(() => {
 })
 
 onMounted(async () => {
-  nowTimer = setInterval(() => { nowMinutes.value = getNowMinutes() }, 600000)
+  nowTimer = setInterval(() => { nowDate.value = new Date() }, 60000)
   f7.on('pageAfterIn', _onF7PageAfterIn)
   store.initStages()
   await store.loadIfStale()
