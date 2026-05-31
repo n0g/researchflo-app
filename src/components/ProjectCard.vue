@@ -115,9 +115,8 @@ const scheduledHoursThisWeek = computed(() => {
     if (!m) continue
     const dt = new Date(m[1])
     if (dt < monday || dt >= sunday) continue
-    const t = (task.labels || []).find(l => l.startsWith('time::'))?.replace('time::', '')
-    if (!t) continue
-    minutes += t === '15m' ? 15 : t === '30m' ? 30 : t === '2h' ? 120 : 60
+    if (!task.estimated_time) continue
+    minutes += task.estimated_time
   }
   return minutes / 60
 })

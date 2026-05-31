@@ -41,13 +41,7 @@ export function isPersonLabel(l) {
   return l.startsWith('person::') || l.startsWith('@person::')
 }
 
-export function getProjectStage(tasks, stageLabels, projectId) {
-  const stageLabelSet = new Set(stageLabels)
-  for (const t of tasks) {
-    if (t.project_id !== projectId) continue
-    const sl = (t.labels || []).find(l => stageLabelSet.has(l))
-    if (sl) return { task: t, label: sl }
-  }
+export function getProjectStage() {
   return null
 }
 
@@ -62,11 +56,6 @@ export function getProjectMeta(tasks, projectId) {
     if (n.startsWith('author:') || n.startsWith('first author:')) {
       author = t.content.split(':')[1].trim().split(' ')[0]
     }
-    for (const l of (t.labels || [])) {
-      for (const v of VENUES) {
-        if (l.toLowerCase() === v) { venue = v.toUpperCase(); break }
-      }
-    }
   }
   return { venue, author }
 }
@@ -77,7 +66,6 @@ export function getProjectTasks(tasks, stageLabels, excludedSectionIds, projectI
     .filter(t => {
       if (t.project_id !== projectId) return false
       if (t.is_completed) return false
-      if ((t.labels || []).some(l => stageLabelSet.has(l))) return false
       if (excludedSectionIds.has(t.section_id)) return false
       return true
     })

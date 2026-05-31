@@ -297,7 +297,7 @@ import { useBoardStore } from '../stores/board.js'
 import { useCalendarStore } from '../stores/calendar.js'
 import { useSidebar } from '../composables/useSidebar.js'
 import { useSchedulePrefs } from '../composables/useSchedulePrefs.js'
-import { getLabel, getUrgencyLabel, getImportance, getTime } from '../composables/useTaskTriage.js'
+import { getUrgencyLabel, getImportance, getTime } from '../composables/useTaskTriage.js'
 import { useRelativeDateGroups } from '../composables/useRelativeDateGroups.js'
 import { parseTaskContent } from '../lib/helpers.js'
 

@@ -537,9 +537,7 @@ export const useCalendarStore = defineStore('calendar', () => {
     if (!token) return
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
     const desc = buildEventDescription(task, projectName)
-    const durationMap = { '15m': 15, '30m': 30, '1h': 60, '2h': 120, '4h': 240 }
-    const timeLabel = (task.labels || []).find(l => l.startsWith('time::'))
-    const duration = timeLabel ? durationMap[timeLabel.slice(6)] : null
+    const duration = task.estimated_time ?? null
     await Promise.allSettled(evs.map(async ev => {
       if (ev._sourceType !== 'google' && ev._sourceType !== undefined) return
       const patch = { summary: task.content, description: desc }

@@ -16,8 +16,6 @@ export const useBoardStore = defineStore('board', () => {
   const loading = ref(false)
   const setupStatus = ref('')
   const cardDragging = ref(false)
-  const triageTaskIds = ref([])
-  const triageCurrentId = ref(null)
   const pendingScheduleTask = ref(null)
   const labels = ref([])  // No Todoist labels; kept for API compat (always empty)
   const activeFilter = ref(null)
@@ -737,11 +735,11 @@ export const useBoardStore = defineStore('board', () => {
     task.description = _buildTaskDescription(task)
   }
 
-  async function updateTaskTriage(taskId, { priority, labels: newLabels, dueDate, description, content }) {
+  async function updateTaskTriage(taskId, { priority, estimatedTime, dueDate, description, content }) {
     const task = tasks.value.find(t => t.id === taskId)
     const updates = {}
     if (priority !== undefined) updates.priority = priority
-    if (newLabels !== undefined) updates.labels = newLabels
+    if (estimatedTime !== undefined) updates.estimated_time = estimatedTime
     if (content !== undefined) updates.content = content
     if (dueDate !== undefined) updates.due_date = dueDate || null
     if (description !== undefined) {
@@ -757,13 +755,13 @@ export const useBoardStore = defineStore('board', () => {
 
     if (task) {
       if (priority !== undefined) task.priority = priority
-      if (newLabels !== undefined) task.labels = newLabels
+      if (estimatedTime !== undefined) task.estimated_time = estimatedTime
       if (content !== undefined) task.content = content
       if (dueDate !== undefined) task.due = dueDate ? { date: dueDate } : null
       if (description !== undefined) {
         task.description = _buildTaskDescription({ ...task, description: updates.description })
       }
-      if (content !== undefined || newLabels !== undefined || description !== undefined) {
+      if (content !== undefined || estimatedTime !== undefined || description !== undefined) {
         const calStore = useCalendarStore()
         if (calStore.isConnected) {
           const projectName = projects.value.find(p => p.id === task.project_id)?.name ?? ''
@@ -775,7 +773,7 @@ export const useBoardStore = defineStore('board', () => {
 
   return {
     token, stages, projects, tasks, loading, lastUpdated, cardDragging,
-    triageTaskIds, triageCurrentId, pendingScheduleTask, labels,
+    pendingScheduleTask, labels,
     activeFilter, stageLabels, displayProjects, inboxProjectId,
     excludedSectionIds, deadlineSectionIds, allCollaborators, allVenues, allPeople, setupStatus, myPeopleId,
     initStages, saveToken, saveStages, resetToken, loadData, loadIfStale,
