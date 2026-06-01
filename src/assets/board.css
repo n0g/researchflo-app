@@ -68,20 +68,32 @@
 }
 @keyframes ptr-spin { to { transform: translateX(-50%) rotate(360deg); } }
 
-/* ── BOARD LOADING ── */
-.board-loading {
-  position: absolute; inset: 0;
-  display: flex; align-items: center; justify-content: center;
-  background: var(--bg); z-index: 5; pointer-events: none;
+/* ── BOARD SKELETON ── */
+@keyframes board-shimmer {
+  0%   { background-position: -600px 0; }
+  100% { background-position: 600px 0; }
 }
-.board-spinner {
-  width: 20px; height: 20px;
-  border: 2px solid var(--border);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+.board-skeleton { pointer-events: none; }
+.skeleton-card,
+.skeleton-chip {
+  background: linear-gradient(
+    90deg,
+    var(--bg-surface) 0%,
+    var(--bg) 50%,
+    var(--bg-surface) 100%
+  );
+  background-size: 600px 100%;
+  animation: board-shimmer 1.4s ease-in-out infinite;
 }
-@keyframes spin { to { transform: rotate(360deg); } }
+.skeleton-card {
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+.skeleton-chip {
+  width: 80px;
+  height: 16px;
+  border-radius: 6px;
+}
 
 /* ── BOARD LAYOUT (Stitch: gap-based, no border-right separators) ── */
 .board {

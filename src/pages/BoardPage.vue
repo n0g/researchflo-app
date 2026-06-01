@@ -31,12 +31,23 @@
           </button>
         </div>
 
-        <div v-if="store.loading && !boardReady" class="board-loading" role="status">
-          <span class="sr-only">Loading board</span>
-          <div class="board-spinner"></div>
+        <div v-if="store.loading && !boardReady" class="board board-skeleton" aria-hidden="true">
+          <div v-for="col in 4" :key="col" class="col">
+            <div class="col-head">
+              <div class="skeleton-chip"></div>
+            </div>
+            <div class="col-body">
+              <div
+                v-for="(h, i) in [[88,52,72,64],[64,96,52,80],[72,60,88,52],[52,80,64,96]][col-1]"
+                :key="i"
+                class="skeleton-card"
+                :style="{ height: h + 'px' }"
+              ></div>
+            </div>
+          </div>
         </div>
 
-        <div class="board" role="main" :aria-busy="store.loading">
+        <div v-else class="board" role="main" :aria-busy="store.loading">
           <BoardColumn
             v-for="(stage, idx) in store.stages"
             :key="stage.id || stage.name"
