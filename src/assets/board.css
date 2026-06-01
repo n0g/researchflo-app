@@ -498,12 +498,15 @@ html[data-theme="light"] .search-pill {
   background: none;
   border: none;
   outline: none;
+  box-shadow: none;
+  -webkit-appearance: none;
   font-family: var(--font);
   font-size: 14px;
   color: var(--text);
   padding: 0;
   min-width: 0;
 }
+.search-pill-input:focus { outline: none; box-shadow: none; }
 .search-pill-input::placeholder { color: var(--text3); }
 .search-pill-input::-webkit-search-cancel-button { display: none; }
 .search-pill-clear {
