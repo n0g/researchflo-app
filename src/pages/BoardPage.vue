@@ -16,6 +16,21 @@
         </button>
         <div ref="ptrIndicator" class="ptr-indicator" aria-hidden="true"></div>
 
+        <!-- Mobile search bar -->
+        <div class="board-search-mobile">
+          <i class="ph ph-magnifying-glass board-search-icon" aria-hidden="true"></i>
+          <input
+            v-model="store.searchQuery"
+            class="board-search-input"
+            type="search"
+            placeholder="Search projects…"
+            @keydown.escape="store.searchQuery = ''"
+          />
+          <button v-if="store.searchQuery" class="board-search-clear" aria-label="Clear search" @click="store.searchQuery = ''">
+            <i class="ph ph-x"></i>
+          </button>
+        </div>
+
         <div v-if="store.loading && !boardReady" class="board-loading" role="status">
           <span class="sr-only">Loading board</span>
           <div class="board-spinner"></div>
@@ -38,6 +53,25 @@
           />
         </div>
 
+        <!-- Desktop search pill -->
+        <div class="search-pill" :class="{ expanded: searchExpanded || store.searchQuery }">
+          <button class="search-pill-btn" aria-label="Search projects" @click="expandSearch">
+            <i class="ph ph-magnifying-glass" aria-hidden="true"></i>
+          </button>
+          <input
+            ref="searchInputEl"
+            v-model="store.searchQuery"
+            class="search-pill-input"
+            type="search"
+            placeholder="Search…"
+            @blur="onSearchBlur"
+            @keydown.escape="clearSearch"
+          />
+          <button v-if="store.searchQuery" class="search-pill-clear" aria-label="Clear" @click="clearSearch">
+            <i class="ph ph-x"></i>
+          </button>
+        </div>
+
         <button class="fab-new-project" title="New project" aria-label="New project" @click="openNewProject">
           <i class="ph ph-plus" aria-hidden="true"></i>
         </button>
@@ -49,7 +83,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { f7 } from 'framework7-vue/bundle'
 import { useBoardStore } from '../stores/board.js'
 import { supabase } from '../lib/supabase.js'
@@ -66,6 +100,22 @@ const { sidebarCollapsed, toggleSidebar } = useSidebar()
 const screenEl = ref(null)
 const ptrIndicator = ref(null)
 const boardReady = ref(false)
+const searchInputEl = ref(null)
+const searchExpanded = ref(false)
+
+function expandSearch() {
+  searchExpanded.value = true
+  nextTick(() => searchInputEl.value?.focus())
+}
+
+function onSearchBlur() {
+  if (!store.searchQuery) searchExpanded.value = false
+}
+
+function clearSearch() {
+  store.searchQuery = ''
+  searchExpanded.value = false
+}
 
 const unassignedProjects = computed(() =>
   store.displayProjects.filter(p => !store.projectStage(p.id))

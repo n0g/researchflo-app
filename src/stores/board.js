@@ -35,7 +35,20 @@ export const useBoardStore = defineStore('board', () => {
 
   // ── Computed ───────────────────────────────────────────────────────────────
   const stageLabels = computed(() => (stages.value || []).map(s => s.id).filter(Boolean))
-  const displayProjects = computed(() => projects.value)
+  const searchQuery = ref('')
+
+  const displayProjects = computed(() => {
+    const q = searchQuery.value.trim().toLowerCase()
+    if (!q) return projects.value
+    return projects.value.filter(p => {
+      if ((p.name || '').toLowerCase().includes(q)) return true
+      if ((p.status_text || '').toLowerCase().includes(q)) return true
+      if ((p.summary || '').toLowerCase().includes(q)) return true
+      if ((p.venue || '').toLowerCase().includes(q)) return true
+      if ((p.owner_person?.display_name || '').toLowerCase().includes(q)) return true
+      return (p.members || []).some(m => (m.person?.display_name || '').toLowerCase().includes(q))
+    })
+  })
   const inboxProjectId = computed(() => null)
 
   const allPeople = computed(() => {
@@ -774,7 +787,7 @@ export const useBoardStore = defineStore('board', () => {
   return {
     token, stages, projects, tasks, loading, lastUpdated, cardDragging,
     pendingScheduleTask, labels,
-    activeFilter, stageLabels, displayProjects, inboxProjectId,
+    activeFilter, searchQuery, stageLabels, displayProjects, inboxProjectId,
     excludedSectionIds, deadlineSectionIds, allCollaborators, allVenues, allPeople, setupStatus, myPeopleId,
     initStages, saveToken, saveStages, resetToken, loadData, loadIfStale,
     projectStage, projectStatusTask, projectMeta, projectTasks, privateProjectTasks,
