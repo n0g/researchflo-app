@@ -506,7 +506,7 @@ html[data-theme="light"] .search-pill {
   padding: 0;
   min-width: 0;
 }
-.search-pill-input:focus { outline: none; box-shadow: none; }
+.search-pill-input:focus { outline: none; box-shadow: none; border-color: transparent; }
 .search-pill-input::placeholder { color: var(--text3); }
 .search-pill-input::-webkit-search-cancel-button { display: none; }
 .search-pill-clear {
