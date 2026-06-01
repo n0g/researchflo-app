@@ -459,7 +459,7 @@ html[data-theme="light"] .reviews-navbar .btn.icon:hover { background: rgba(0,0,
 .search-pill {
   position: absolute;
   bottom: 32px;
-  right: 92px; /* 24px margin + 56px FAB + 12px gap */
+  right: 80px; /* 24px margin + 44px FAB + 12px gap */
   height: 44px;
   width: 44px;
   display: flex;
