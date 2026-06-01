@@ -458,7 +458,7 @@ html[data-theme="light"] .reviews-navbar .btn.icon:hover { background: rgba(0,0,
 /* ── DESKTOP SEARCH PILL ── */
 .search-pill {
   position: absolute;
-  bottom: 32px;
+  bottom: 24px;
   right: 80px; /* 24px margin + 44px FAB + 12px gap */
   height: 44px;
   width: 44px;
