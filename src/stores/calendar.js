@@ -40,6 +40,8 @@ export const useCalendarStore = defineStore('calendar', () => {
   const caldavConnecting = ref(false)
   const caldavError = ref('')
 
+  const isAnyCalendarConnected = computed(() => isConnected.value || caldavSources.value.length > 0)
+
   const writableCalendars = computed(() =>
     calendarList.value.filter(c => c.accessRole === 'writer' || c.accessRole === 'owner')
   )
@@ -708,7 +710,7 @@ export const useCalendarStore = defineStore('calendar', () => {
 
   return {
     clientId, events, loading, connectError, selectedCalendarId, selectedTargetId, targetCalHref,
-    calendarList, writableCalendars, allCalendars, isConnected, initializing, scheduledByTaskId, taskIdByEventUid,
+    calendarList, writableCalendars, allCalendars, isConnected, isAnyCalendarConnected, initializing, scheduledByTaskId, taskIdByEventUid,
     caldavSources, caldavCalendars, caldavConnecting, caldavError,
     saveClientId, saveCalendarId, saveTargetId, connect, disconnect, init, checkConnection,
     loadWeekEvents, createEvent, deleteEvent, deleteAllByTaskId, updateEvent, updateEventTitle,

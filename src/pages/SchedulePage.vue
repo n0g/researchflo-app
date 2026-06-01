@@ -56,7 +56,7 @@
             </div>
           </div>
           <div ref="taskListBodyEl" class="triage-list-body" role="listbox" aria-label="Tasks">
-            <div v-if="!calStore.isConnected && !calStore.initializing" class="cal-mobile-notice">
+            <div v-if="!calStore.isAnyCalendarConnected && !calStore.initializing" class="cal-mobile-notice">
               <i class="ph ph-calendar" aria-hidden="true"></i>
               <span>{{ calStore.clientId ? 'Calendar session expired' : 'Connect Google Calendar to schedule tasks' }}</span>
               <button class="btn sm primary" @click="calStore.clientId ? calStore.connect() : goSettings()">
@@ -134,7 +134,7 @@
 
         <!-- Right: calendar -->
         <div class="schedule-cal">
-          <template v-if="!calStore.isConnected && !calStore.initializing">
+          <template v-if="!calStore.isAnyCalendarConnected && !calStore.initializing">
             <div class="cal-not-connected">
               <i class="ph ph-calendar" aria-hidden="true"></i>
               <p>{{ calStore.clientId ? 'Session expired — reconnect to continue' : 'Connect Google Calendar to schedule tasks' }}</p>
@@ -377,7 +377,7 @@ function focusTaskRow(idx) {
 }
 
 function scheduleTaskByKey(task) {
-  if (calStore.isConnected) {
+  if (calStore.isAnyCalendarConnected) {
     store.pendingScheduleTask = task
     f7.view.current.router.navigate('/schedule/place/')
   } else {
@@ -668,7 +668,7 @@ function onTaskTouchEnd(e, task) {
   if (!t) return
   if (Math.abs(t.clientX - _taskTapStartX) > 10 || Math.abs(t.clientY - _taskTapStartY) > 10) return
   e.preventDefault()  // suppress synthesized click
-  if (calStore.isConnected) {
+  if (calStore.isAnyCalendarConnected) {
     store.pendingScheduleTask = task
     f7.view.current.router.navigate('/schedule/place/')
   } else {
@@ -777,7 +777,7 @@ async function onPointerUp() {
   draggingCalEvent.value = null
   hoveredSlot.value = null
 
-  if (!slot || !calStore.isConnected || isPastDueDrop) return
+  if (!slot || !calStore.isAnyCalendarConnected || isPastDueDrop) return
 
   const [year, month, day] = slot.dateStr.split('-').map(Number)
 
@@ -841,7 +841,7 @@ function goBoard()    { f7.tab.show('#view-board') }
 function goTasks()    { f7.tab.show('#view-tasks') }
 function goSettings() { f7.tab.show('#view-settings') }
 
-watch(() => calStore.isConnected, async (connected) => {
+watch(() => calStore.isAnyCalendarConnected, async (connected) => {
   if (connected) {
     calStore.loadWeekEvents(weekStart.value)
     await nextTick()
@@ -904,7 +904,7 @@ onMounted(async () => {
   f7.on('pageAfterIn', _onF7PageAfterIn)
   store.initStages()
   await store.loadIfStale()
-  if (calStore.isConnected) {
+  if (calStore.isAnyCalendarConnected) {
     calStore.loadWeekEvents(weekStart.value)
     await nextTick()
     if (calBodyEl.value) calBodyEl.value.scrollTop = SLOT_HEIGHT * 2
