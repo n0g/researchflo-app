@@ -357,6 +357,9 @@ const filteredTasks = computed(() => {
   }
 })
 
+const nowDate = ref(new Date())
+let nowTimer = null
+
 const taskGroups = useRelativeDateGroups(filteredTasks, scheduledIso, nowDate)
 
 const taskFlatIndex = computed(() => {
@@ -880,12 +883,10 @@ watch(() => calStore.scheduledByTaskId, async (map) => {
 })
 
 // ── Current time indicator ──
-const nowDate = ref(new Date())
 const nowMinutes = computed(() => {
   const n = nowDate.value
   return Math.round((n.getHours() * 60 + n.getMinutes()) / 15) * 15
 })
-let nowTimer = null
 const nowTop = computed(() => {
   const todayInWeek = weekDays.value.some(d => isToday(d))
   if (!todayInWeek) return null
