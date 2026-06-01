@@ -496,6 +496,70 @@ html[data-theme="dark"] .seg-btn.active { background: rgba(255,255,255,0.15); }
 }
 @media (max-width: 767px) { .schedule-cal { background: var(--bg); } }
 
+/* ── Schedule search pill ── */
+.sched-search-pill {
+  position: absolute;
+  bottom: 22px; /* centers 44px pill alongside 56px filter fab at bottom:16px */
+  right: 80px;  /* 16px margin + 56px fab + 8px gap */
+  height: 44px;
+  width: 44px;
+  display: flex;
+  align-items: center;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.15);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  border: 1px solid rgba(255,255,255,0.28);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.20);
+  transition: width 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+  z-index: 3;
+}
+html[data-theme="light"] .sched-search-pill {
+  background: rgba(0,0,0,0.07);
+  border-color: rgba(0,0,0,0.12);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.80), 0 1px 8px rgba(0,0,0,0.08);
+}
+html[data-theme="dark"] .sched-search-pill {
+  background: rgba(30,30,35,0.60);
+  border-color: rgba(255,255,255,0.10);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.06);
+}
+.sched-search-pill.expanded { width: 180px; }
+.sched-search-btn {
+  flex-shrink: 0;
+  width: 44px; height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  color: var(--text2);
+  background: none; border: none; cursor: pointer;
+}
+.sched-search-input {
+  flex: 1;
+  background: none; border: none; outline: none; box-shadow: none;
+  -webkit-appearance: none;
+  font-family: var(--font);
+  font-size: 14px;
+  color: var(--text);
+  padding: 0;
+  min-width: 0;
+}
+.sched-search-input:focus,
+html[data-theme="dark"] .sched-search-input:focus { outline: none; box-shadow: none; border-color: transparent; }
+.sched-search-input::placeholder { color: var(--text3); }
+.sched-search-input::-webkit-search-cancel-button { display: none; }
+.sched-search-clear {
+  flex-shrink: 0;
+  width: 32px; height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+  color: var(--text3);
+  background: none; border: none; cursor: pointer;
+}
+@media (max-width: 767px) {
+  .sched-search-pill { bottom: calc(env(safe-area-inset-bottom) + 6px); }
+}
+
 /* Not-connected state */
 .cal-not-connected {
   display: flex;

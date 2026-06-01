@@ -121,6 +121,23 @@
               </div>
             </template>
           </div>
+          <div class="sched-search-pill" :class="{ expanded: searchExpanded || searchQuery }">
+            <button class="sched-search-btn" aria-label="Search tasks" @click="expandSearch">
+              <i class="ph ph-magnifying-glass" aria-hidden="true"></i>
+            </button>
+            <input
+              ref="searchInputEl"
+              v-model="searchQuery"
+              class="sched-search-input"
+              type="search"
+              placeholder="Search…"
+              @blur="onSearchBlur"
+              @keydown.escape="clearSearch"
+            />
+            <button v-if="searchQuery" class="sched-search-clear" aria-label="Clear" @click="clearSearch">
+              <i class="ph ph-x"></i>
+            </button>
+          </div>
           <button
             class="filter-fab"
             :class="{ active: showUnscheduled }"
@@ -318,6 +335,16 @@ const calStore = useCalendarStore()
 const { sidebarCollapsed, toggleSidebar } = useSidebar()
 const schedPrefs = useSchedulePrefs()
 const taskListBodyEl = ref(null)
+const searchInputEl = ref(null)
+const searchQuery = ref('')
+const searchExpanded = ref(false)
+
+function expandSearch() {
+  searchExpanded.value = true
+  nextTick(() => searchInputEl.value?.focus())
+}
+function onSearchBlur() { if (!searchQuery.value) searchExpanded.value = false }
+function clearSearch() { searchQuery.value = ''; searchExpanded.value = false }
 
 // ── Task list ──
 const tab = ref('all')
@@ -360,7 +387,17 @@ const filteredTasks = computed(() => {
 const nowDate = ref(new Date())
 let nowTimer = null
 
-const taskGroups = useRelativeDateGroups(filteredTasks, scheduledIso, nowDate)
+const searchedTasks = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  if (!q) return filteredTasks.value
+  return filteredTasks.value.filter(t => {
+    if ((t.content || '').toLowerCase().includes(q)) return true
+    const pName = t.project_id === null ? 'inbox' : (store.displayProjects.find(p => p.id === t.project_id)?.name ?? '')
+    return pName.toLowerCase().includes(q)
+  })
+})
+
+const taskGroups = useRelativeDateGroups(searchedTasks, scheduledIso, nowDate)
 
 const taskFlatIndex = computed(() => {
   const map = new Map()
