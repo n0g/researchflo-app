@@ -56,14 +56,17 @@
             </div>
           </div>
           <div ref="taskListBodyEl" class="triage-list-body" role="listbox" aria-label="Tasks">
-            <div v-if="!calStore.isConnected" class="cal-mobile-notice">
+            <div v-if="!calStore.isConnected && !calStore.initializing" class="cal-mobile-notice">
               <i class="ph ph-calendar" aria-hidden="true"></i>
               <span>{{ calStore.clientId ? 'Calendar session expired' : 'Connect Google Calendar to schedule tasks' }}</span>
               <button class="btn sm primary" @click="calStore.clientId ? calStore.connect() : goSettings()">
                 {{ calStore.clientId ? 'Reconnect' : 'Settings' }}
               </button>
             </div>
-            <div v-if="!taskGroups.length" class="triage-empty-list">No tasks</div>
+            <template v-if="calStore.initializing">
+              <div v-for="i in 5" :key="i" class="schedule-skeleton-row"></div>
+            </template>
+            <div v-else-if="!taskGroups.length" class="triage-empty-list">No tasks</div>
             <template v-for="group in taskGroups" :key="group.key">
               <div class="schedule-group-sep">
                 <span class="schedule-group-label">{{ group.label }}</span>
@@ -131,7 +134,7 @@
 
         <!-- Right: calendar -->
         <div class="schedule-cal">
-          <template v-if="!calStore.isConnected">
+          <template v-if="!calStore.isConnected && !calStore.initializing">
             <div class="cal-not-connected">
               <i class="ph ph-calendar" aria-hidden="true"></i>
               <p>{{ calStore.clientId ? 'Session expired — reconnect to continue' : 'Connect Google Calendar to schedule tasks' }}</p>

@@ -968,3 +968,22 @@ html[data-theme="dark"] .seg-btn.active { background: rgba(255,255,255,0.15); }
   border-radius: 50%;
   background: var(--accent);
 }
+
+/* ── SKELETON LOADING ── */
+@keyframes schedule-shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.schedule-skeleton-row {
+  height: 54px;
+  border-radius: 10px;
+  margin-bottom: 6px;
+  background: linear-gradient(
+    90deg,
+    var(--bg-surface) 0%,
+    var(--bg) 50%,
+    var(--bg-surface) 100%
+  );
+  background-size: 400px 100%;
+  animation: schedule-shimmer 1.4s ease-in-out infinite;
+}

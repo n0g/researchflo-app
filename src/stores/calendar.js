@@ -32,6 +32,7 @@ export const useCalendarStore = defineStore('calendar', () => {
   const loading = ref(false)
   const connectError = ref('')
   const isConnected = ref(false)
+  const initializing = ref(true)
 
   // CalDAV sources
   const caldavSources = ref([]) // { id, type, name, url, is_write_target, enabled }
@@ -267,6 +268,7 @@ export const useCalendarStore = defineStore('calendar', () => {
     }
     // Always load CalDAV sources on init
     await loadCalDAVSources()
+    initializing.value = false
   }
 
   async function connect() {
@@ -706,7 +708,7 @@ export const useCalendarStore = defineStore('calendar', () => {
 
   return {
     clientId, events, loading, connectError, selectedCalendarId, selectedTargetId, targetCalHref,
-    calendarList, writableCalendars, allCalendars, isConnected, scheduledByTaskId, taskIdByEventUid,
+    calendarList, writableCalendars, allCalendars, isConnected, initializing, scheduledByTaskId, taskIdByEventUid,
     caldavSources, caldavCalendars, caldavConnecting, caldavError,
     saveClientId, saveCalendarId, saveTargetId, connect, disconnect, init, checkConnection,
     loadWeekEvents, createEvent, deleteEvent, deleteAllByTaskId, updateEvent, updateEventTitle,
