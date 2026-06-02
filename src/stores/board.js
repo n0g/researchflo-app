@@ -63,7 +63,7 @@ export const useBoardStore = defineStore('board', () => {
   })
 
   const allCollaborators = computed(() =>
-    [...new Set(allPeople.value.map(p => p.display_name))].sort()
+    [...new Set(allPeople.value.filter(p => p.id !== myPeopleId.value).map(p => p.display_name))].sort()
   )
 
   const allVenues = computed(() => {
