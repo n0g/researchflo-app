@@ -1008,13 +1008,12 @@ html[data-theme="dark"] .inbox-search-pill {
   -webkit-appearance: none;
   font-family: var(--font);
   font-size: 15px;
-  color: var(--text);
-  -webkit-text-fill-color: var(--text);
+  color: var(--text) !important;
+  -webkit-text-fill-color: var(--text) !important;
   min-width: 0;
   padding: 0;
 }
 .inbox-search-input:focus { outline: none; box-shadow: none; border-color: transparent; }
-html[data-theme="dark"] .inbox-search-input:focus { outline: none; box-shadow: none; }
 .inbox-search-input::placeholder { color: var(--text3); }
 .inbox-search-input::-webkit-search-cancel-button { display: none; }
 .inbox-search-clear {
