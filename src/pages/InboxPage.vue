@@ -161,6 +161,7 @@ const dragId = ref(null)
 const dropIndex = ref(-1)
 
 function onDragStart(e) {
+  if (searchQuery.value.trim()) return
   if (!e.target.closest('.task-handle')) return
   const wrap = e.target.closest('.task-item-wrap')
   if (!wrap) return
