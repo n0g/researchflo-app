@@ -1009,6 +1009,7 @@ html[data-theme="dark"] .inbox-search-pill {
   font-family: var(--font);
   font-size: 15px;
   color: var(--text);
+  -webkit-text-fill-color: var(--text);
   min-width: 0;
   padding: 0;
 }

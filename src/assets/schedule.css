@@ -536,6 +536,7 @@ html[data-theme="dark"] .sched-search-pill {
   font-family: var(--font);
   font-size: 14px;
   color: var(--text);
+  -webkit-text-fill-color: var(--text);
   padding: 0;
   min-width: 0;
 }
