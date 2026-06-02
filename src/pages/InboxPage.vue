@@ -1,7 +1,28 @@
 <template>
   <f7-page name="inbox" class="inbox-page" no-swipeback>
     <div class="inbox-screen">
-      <AppSidebar current-page="inbox" />
+      <AppSidebar current-page="inbox">
+        <template #filters>
+          <template v-if="store.allHashtags.length">
+            <button class="sidebar-section-header" :aria-expanded="tagsOpen" @click="tagsOpen = !tagsOpen">
+              <span class="sidebar-section-label">Tags</span>
+              <i class="ph ph-caret-down sidebar-section-chevron" :class="{ open: tagsOpen }" aria-hidden="true"></i>
+            </button>
+            <template v-if="tagsOpen">
+              <button
+                v-for="tag in store.allHashtags"
+                :key="tag"
+                class="sidebar-nav-item"
+                :class="{ 'sidebar-filter-active': activeHashtag === tag }"
+                @click="toggleHashtag(tag)"
+              >
+                <span class="sidebar-hashtag">#</span>
+                <span class="sidebar-label">{{ tag }}</span>
+              </button>
+            </template>
+          </template>
+        </template>
+      </AppSidebar>
 
       <div class="inbox-main">
         <button
@@ -98,6 +119,13 @@ import TaskItem from '../components/TaskItem.vue'
 const store = useBoardStore()
 const { sidebarCollapsed, toggleSidebar } = useSidebar()
 
+const tagsOpen = ref(true)
+const activeHashtag = ref(null)
+
+function toggleHashtag(tag) {
+  activeHashtag.value = activeHashtag.value === tag ? null : tag
+}
+
 // ── Drag to reorder ──
 const taskListEl = ref(null)
 const dragId = ref(null)
@@ -152,11 +180,16 @@ const addingTask = ref(false)
 const newTaskContent = ref('')
 const quickAddInputEl = ref(null)
 
-const inboxTasks = computed(() =>
-  store.tasks
+const inboxTasks = computed(() => {
+  let tasks = store.tasks
     .filter(t => t.project_id == null && !t.is_completed)
     .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-)
+  if (activeHashtag.value) {
+    const tag = activeHashtag.value
+    tasks = tasks.filter(t => new RegExp(`#${tag}\\b`, 'i').test(t.content || ''))
+  }
+  return tasks
+})
 
 const showArchive = ref(false)
 const loadingArchive = ref(false)

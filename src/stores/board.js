@@ -72,6 +72,14 @@ export const useBoardStore = defineStore('board', () => {
     return [...venues].sort()
   })
 
+  const allHashtags = computed(() => {
+    const tags = new Set()
+    for (const t of tasks.value) {
+      for (const m of (t.content || '').matchAll(/#(\w+)/g)) tags.add(m[1])
+    }
+    return [...tags].sort()
+  })
+
   const focusProjectIds = computed(() => {
     const ids = new Set()
     for (const [projectId, energy] of _userEnergy.value) {
@@ -788,7 +796,7 @@ export const useBoardStore = defineStore('board', () => {
     token, stages, projects, tasks, loading, lastUpdated, cardDragging,
     pendingScheduleTask, labels,
     activeFilter, searchQuery, stageLabels, displayProjects, inboxProjectId,
-    excludedSectionIds, deadlineSectionIds, allCollaborators, allVenues, allPeople, setupStatus, myPeopleId,
+    excludedSectionIds, deadlineSectionIds, allCollaborators, allVenues, allHashtags, allPeople, setupStatus, myPeopleId,
     initStages, saveToken, saveStages, resetToken, loadData, loadIfStale,
     projectStage, projectStatusTask, projectMeta, projectTasks, privateProjectTasks,
     completedProjectTasks, completedProjectTaskCount, fetchCompletedTasks, fetchCompletedCount, projectDeadline,

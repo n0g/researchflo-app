@@ -205,6 +205,15 @@ html[data-theme="dark"] .sidebar-nav-item:hover { background: rgba(255,255,255,0
 }
 .sidebar-filter-active .sidebar-venue-dot { background: var(--accent); }
 
+.sidebar-hashtag {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text3);
+  flex-shrink: 0;
+  line-height: 1;
+}
+.sidebar-filter-active .sidebar-hashtag { color: var(--accent); }
+
 /* Sidebar footer */
 .sidebar-footer {
   margin-top: auto;
