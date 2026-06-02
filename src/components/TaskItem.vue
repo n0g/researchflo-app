@@ -59,6 +59,7 @@
           <template v-if="taskDraft"><template v-for="(seg, i) in draftSegments(taskDraft)" :key="i"><span v-if="seg.type === 'cursor'" class="remote-cursor" :style="`--cursor-color:${seg.color}`"></span><template v-else>{{ seg.value }}</template></template></template>
           <template v-else v-for="seg in contentSegments" :key="seg.i">
             <a v-if="seg.href" :href="seg.href" target="_blank" rel="noopener noreferrer" class="task-link" @click.stop>{{ seg.text }}</a>
+            <span v-else-if="seg.hashtag" class="task-hashtag">{{ seg.text }}</span>
             <template v-else>{{ seg.text }}</template>
           </template>
           <i v-if="task.caldav_event_uid" class="ph ph-calendar-check task-cal-badge" aria-hidden="true"></i>

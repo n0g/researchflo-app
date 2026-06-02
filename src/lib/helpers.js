@@ -1,10 +1,14 @@
 export function parseTaskContent(text) {
   const segments = []
-  const re = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g
+  const re = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)|#(\w+)/g
   let last = 0, m, i = 0
   while ((m = re.exec(text ?? '')) !== null) {
     if (m.index > last) segments.push({ i: i++, text: text.slice(last, m.index) })
-    segments.push({ i: i++, text: m[1], href: m[2] })
+    if (m[3] !== undefined) {
+      segments.push({ i: i++, text: m[0], hashtag: true })
+    } else {
+      segments.push({ i: i++, text: m[1], href: m[2] })
+    }
     last = m.index + m[0].length
   }
   if (last < (text ?? '').length) segments.push({ i: i++, text: text.slice(last) })

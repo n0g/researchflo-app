@@ -114,6 +114,7 @@
                   <div class="triage-task-title">
                     <template v-for="seg in parseTaskContent(task.content)" :key="seg.i">
                       <a v-if="seg.href" :href="seg.href" target="_blank" rel="noopener noreferrer" class="task-link" @click.stop>{{ seg.text }}</a>
+                      <span v-else-if="seg.hashtag" class="task-hashtag">{{ seg.text }}</span>
                       <template v-else>{{ seg.text }}</template>
                     </template>
                   </div>
