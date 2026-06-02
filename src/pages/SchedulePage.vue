@@ -6,11 +6,7 @@
           <template v-if="projectsWithTasks.length">
             <button class="sidebar-section-header" :aria-expanded="projectsOpen" @click="projectsOpen = !projectsOpen">
               <span class="sidebar-section-label">Projects</span>
-              <i
-                class="ph ph-caret-down sidebar-section-chevron"
-                :class="{ open: projectsOpen }"
-                aria-hidden="true"
-              ></i>
+              <i class="ph ph-caret-down sidebar-section-chevron" :class="{ open: projectsOpen }" aria-hidden="true"></i>
             </button>
             <template v-if="projectsOpen">
               <button
@@ -23,6 +19,24 @@
               >
                 <i :class="activeProjectId === project.id ? 'ph ph-folder-open' : 'ph ph-folder'" aria-hidden="true"></i>
                 <span class="sidebar-label">{{ project.name }}</span>
+              </button>
+            </template>
+          </template>
+          <template v-if="store.allHashtags.length">
+            <button class="sidebar-section-header" :aria-expanded="tagsOpen" @click="tagsOpen = !tagsOpen">
+              <span class="sidebar-section-label">Tags</span>
+              <i class="ph ph-caret-down sidebar-section-chevron" :class="{ open: tagsOpen }" aria-hidden="true"></i>
+            </button>
+            <template v-if="tagsOpen">
+              <button
+                v-for="tag in store.allHashtags"
+                :key="tag"
+                class="sidebar-nav-item"
+                :class="{ 'sidebar-filter-active': activeHashtag === tag }"
+                @click="toggleHashtag(tag)"
+              >
+                <span class="sidebar-hashtag">#</span>
+                <span class="sidebar-label">{{ tag }}</span>
               </button>
             </template>
           </template>
@@ -350,7 +364,18 @@ function clearSearch() { searchQuery.value = ''; searchExpanded.value = false }
 const tab = ref('all')
 const showUnscheduled = ref(false)
 const projectsOpen = ref(true)
+const tagsOpen = ref(true)
 const activeProjectId = ref(null)
+
+const activeHashtag = computed(() => {
+  const m = searchQuery.value.trim().match(/^#(\w+)$/)
+  return m ? m[1] : null
+})
+
+function toggleHashtag(tag) {
+  const token = '#' + tag
+  searchQuery.value = searchQuery.value === token ? '' : token
+}
 
 function toggleProject(id) {
   activeProjectId.value = activeProjectId.value === id ? null : id
