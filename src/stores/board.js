@@ -53,7 +53,7 @@ export const useBoardStore = defineStore('board', () => {
 
   const allPeople = computed(() => {
     const map = new Map()
-    for (const p of projects.value) {
+    for (const p of displayProjects.value) {
       if (p.owner_person && !map.has(p.owner_person.id)) map.set(p.owner_person.id, p.owner_person)
       for (const m of (p.members || [])) {
         if (m.person && !map.has(m.person.id)) map.set(m.person.id, m.person)
