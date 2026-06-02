@@ -38,6 +38,21 @@
         <div class="inbox-content">
           <h1 class="settings-page-title">Inbox</h1>
 
+          <div class="inbox-search-pill">
+            <i class="ph ph-magnifying-glass inbox-search-icon" aria-hidden="true"></i>
+            <input
+              ref="searchInputEl"
+              v-model="searchQuery"
+              class="inbox-search-input"
+              type="search"
+              placeholder="Search or #tag…"
+              @keydown.escape="searchQuery = ''"
+            />
+            <button v-if="searchQuery" class="inbox-search-clear" aria-label="Clear" @click="searchQuery = ''">
+              <i class="ph ph-x"></i>
+            </button>
+          </div>
+
           <div ref="taskListEl" role="list" aria-label="Inbox tasks" @pointerdown="onDragStart">
             <div v-if="!inboxTasks.length" class="triage-empty-list">
               <i class="ph ph-wind" aria-hidden="true"></i>
@@ -109,7 +124,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useBoardStore } from '../stores/board.js'
 import { useSidebar } from '../composables/useSidebar.js'
 import AppSidebar from '../components/AppSidebar.vue'
@@ -120,11 +135,23 @@ const store = useBoardStore()
 const { sidebarCollapsed, toggleSidebar } = useSidebar()
 
 const tagsOpen = ref(true)
-const activeHashtag = ref(null)
+const searchQuery = ref('')
+const searchInputEl = ref(null)
 
 function toggleHashtag(tag) {
-  activeHashtag.value = activeHashtag.value === tag ? null : tag
+  const token = '#' + tag
+  if (searchQuery.value === token) {
+    searchQuery.value = ''
+  } else {
+    searchQuery.value = token
+    nextTick(() => searchInputEl.value?.focus())
+  }
 }
+
+const activeHashtag = computed(() => {
+  const m = searchQuery.value.trim().match(/^#(\w+)$/)
+  return m ? m[1] : null
+})
 
 // ── Drag to reorder ──
 const taskListEl = ref(null)
@@ -184,10 +211,8 @@ const inboxTasks = computed(() => {
   let tasks = store.tasks
     .filter(t => t.project_id == null && !t.is_completed)
     .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-  if (activeHashtag.value) {
-    const tag = activeHashtag.value
-    tasks = tasks.filter(t => new RegExp(`#${tag}\\b`, 'i').test(t.content || ''))
-  }
+  const q = searchQuery.value.trim().toLowerCase()
+  if (q) tasks = tasks.filter(t => (t.content || '').toLowerCase().includes(q))
   return tasks
 })
 
