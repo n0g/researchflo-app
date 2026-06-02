@@ -35,9 +35,7 @@
           <i class="ph ph-sidebar-simple" aria-hidden="true"></i>
         </button>
 
-        <div class="inbox-content">
-          <h1 class="settings-page-title">Inbox</h1>
-
+        <div class="inbox-top-bar">
           <div class="inbox-search-pill">
             <i class="ph ph-magnifying-glass inbox-search-icon" aria-hidden="true"></i>
             <input
@@ -52,7 +50,10 @@
               <i class="ph ph-x"></i>
             </button>
           </div>
+        </div>
 
+        <div class="inbox-body">
+        <div class="inbox-content">
           <div ref="taskListEl" role="list" aria-label="Inbox tasks" @pointerdown="onDragStart">
             <div v-if="!inboxTasks.length" class="triage-empty-list">
               <i class="ph ph-wind" aria-hidden="true"></i>
@@ -116,6 +117,7 @@
             </div>
           </div>
         </div>
+        </div><!-- inbox-body -->
       </div>
     </div>
 
