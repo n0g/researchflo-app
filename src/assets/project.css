@@ -964,8 +964,10 @@ html[data-theme="dark"] .overdue-badge { color: var(--red); background: rgba(255
   transition: margin-left 0.3s cubic-bezier(0.16, 1.08, 0.3, 1);
 }
 .inbox-top-bar {
+  position: relative;
+  z-index: 1;
   flex-shrink: 0;
-  padding: calc(env(safe-area-inset-top) + 12px) 48px 12px;
+  padding: calc(env(safe-area-inset-top) + 16px) 48px 12px;
 }
 .inbox-body {
   flex: 1;
@@ -974,7 +976,7 @@ html[data-theme="dark"] .overdue-badge { color: var(--red); background: rgba(255
 }
 @media (max-width: 767px) {
   .inbox-top-bar {
-    padding: calc(env(safe-area-inset-top) + 12px) 24px 12px;
+    padding: calc(env(safe-area-inset-top) + 16px) 24px 12px;
   }
   .inbox-body {
     padding: 0 24px calc(56px + 16px + env(safe-area-inset-bottom));
