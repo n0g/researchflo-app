@@ -16,6 +16,9 @@ const GCAL_REDIRECT_URI = 'https://researchflo.app'
 const EDGE_AUTH_URL = 'https://oqqevpkeqcbkqrgabpkc.supabase.co/functions/v1/google-calendar-auth'
 const EDGE_TOKEN_URL = 'https://oqqevpkeqcbkqrgabpkc.supabase.co/functions/v1/google-calendar-token'
 const CALDAV_PROXY_URL = 'https://oqqevpkeqcbkqrgabpkc.supabase.co/functions/v1/caldav-proxy'
+const ICAL_PROXY_URL = 'https://oqqevpkeqcbkqrgabpkc.supabase.co/functions/v1/ical-proxy'
+// Distinct colors for read-only ICS feeds, assigned by source order.
+const ICAL_COLORS = ['#0078d4', '#8764b8', '#00a89d', '#ca5010', '#498205', '#c239b3']
 const SCOPES = 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly'
 
 // Composite target ID separators: "google:::calId" or "caldav:::sourceId:::calHref"
@@ -40,7 +43,14 @@ export const useCalendarStore = defineStore('calendar', () => {
   const caldavConnecting = ref(false)
   const caldavError = ref('')
 
-  const isAnyCalendarConnected = computed(() => isConnected.value || caldavSources.value.length > 0)
+  // Read-only ICS feed sources (e.g. Outlook "publish calendar" links)
+  const icalSources = ref([]) // { id, name, enabled }
+  const icalConnecting = ref(false)
+  const icalError = ref('')
+
+  const isAnyCalendarConnected = computed(() =>
+    isConnected.value || caldavSources.value.length > 0 || icalSources.value.length > 0
+  )
 
   const writableCalendars = computed(() =>
     calendarList.value.filter(c => c.accessRole === 'writer' || c.accessRole === 'owner')
@@ -139,6 +149,77 @@ export const useCalendarStore = defineStore('calendar', () => {
       throw new Error(err.error || `CalDAV proxy error: ${res.status}`)
     }
     return res.json()
+  }
+
+  // ── ICS feed sources (read-only) ──────────────────────────────────────────
+
+  async function _icalProxy(action, params) {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) throw new Error('Not authenticated')
+    const res = await fetch(ICAL_PROXY_URL, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, tz: Intl.DateTimeFormat().resolvedOptions().timeZone, ...params }),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.error || `ICS proxy error: ${res.status}`)
+    }
+    return res.json()
+  }
+
+  async function loadIcalSources() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    // The feed URL is a secret; it stays server-side and is not selected here.
+    const { data } = await supabase.from('calendar_sources')
+      .select('id, name, enabled')
+      .eq('user_id', user.id)
+      .eq('type', 'ical')
+      .order('sort_order')
+      .order('created_at')
+    icalSources.value = data || []
+  }
+
+  async function connectIcal(url, name) {
+    icalConnecting.value = true
+    icalError.value = ''
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Not signed in')
+      const feedUrl = url.trim()
+      if (!feedUrl) throw new Error('Enter the ICS link')
+
+      // Validate by fetching + parsing server-side before saving anything.
+      const test = await _icalProxy('test', { url: feedUrl })
+
+      const { data: src, error } = await supabase.from('calendar_sources').insert({
+        user_id: user.id,
+        type: 'ical',
+        name: name?.trim() || test.name || 'ICS Calendar',
+        url: feedUrl,
+        is_write_target: false,
+        enabled: true,
+        sort_order: icalSources.value.length,
+      }).select('id, name, enabled').single()
+      if (error) throw new Error(error.message)
+
+      icalSources.value = [...icalSources.value, src]
+      return { source: src, eventCount: test.event_count }
+    } catch (err) {
+      icalError.value = err.message
+      throw err
+    } finally {
+      icalConnecting.value = false
+    }
+  }
+
+  async function disconnectIcal(sourceId) {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    await supabase.from('calendar_sources').delete().eq('id', sourceId).eq('user_id', user.id)
+    icalSources.value = icalSources.value.filter(s => s.id !== sourceId)
+    events.value = events.value.filter(e => e._sourceId !== sourceId)
   }
 
   // ── CalDAV source management ──────────────────────────────────────────────
@@ -269,7 +350,7 @@ export const useCalendarStore = defineStore('calendar', () => {
       await _ensureToken()
     }
     // Always load CalDAV sources on init
-    await loadCalDAVSources()
+    await Promise.all([loadCalDAVSources(), loadIcalSources()])
     initializing.value = false
   }
 
@@ -400,6 +481,38 @@ export const useCalendarStore = defineStore('calendar', () => {
           })
         )
         for (const r of caldavResults) {
+          if (r.status === 'fulfilled') allEvents.push(...r.value)
+        }
+      }
+
+      // 3. Read-only ICS feeds
+      const enabledIcal = icalSources.value.filter(s => s.enabled)
+      if (enabledIcal.length) {
+        const icalResults = await Promise.allSettled(
+          enabledIcal.map(async (src) => {
+            const colorIdx = icalSources.value.findIndex(s => s.id === src.id)
+            try {
+              const result = await _icalProxy('get_events', {
+                source_id: src.id,
+                time_min: timeMin.toISOString(),
+                time_max: timeMax.toISOString(),
+              })
+              return (result.events || []).map(ev => ({
+                id: `ical:${src.id}:${ev.uid}`,
+                summary: ev.summary || '(No title)',
+                description: ev.description || '',
+                location: ev.location || '',
+                start: ev.isAllDay ? { date: ev.start } : { dateTime: ev.start },
+                end: ev.isAllDay ? { date: ev.end } : { dateTime: ev.end },
+                _calColor: ICAL_COLORS[colorIdx % ICAL_COLORS.length],
+                _calId: `ical:${src.id}`, // never equals the write-target, so the UI treats it as read-only
+                _sourceType: 'ical',
+                _sourceId: src.id,
+              }))
+            } catch { return [] }
+          })
+        )
+        for (const r of icalResults) {
           if (r.status === 'fulfilled') allEvents.push(...r.value)
         }
       }
@@ -712,9 +825,11 @@ export const useCalendarStore = defineStore('calendar', () => {
     clientId, events, loading, connectError, selectedCalendarId, selectedTargetId, targetCalHref,
     calendarList, writableCalendars, allCalendars, isConnected, isAnyCalendarConnected, initializing, scheduledByTaskId, taskIdByEventUid,
     caldavSources, caldavCalendars, caldavConnecting, caldavError,
+    icalSources, icalConnecting, icalError,
     saveClientId, saveCalendarId, saveTargetId, connect, disconnect, init, checkConnection,
     loadWeekEvents, createEvent, deleteEvent, deleteAllByTaskId, updateEvent, updateEventTitle,
     syncEventForTask, fetchCalendarList, linkEventToTask, reconcileScheduledTasks, unlinkTaskFromEvent,
     loadCalDAVSources, connectCalDAV, disconnectCalDAV,
+    loadIcalSources, connectIcal, disconnectIcal,
   }
 })

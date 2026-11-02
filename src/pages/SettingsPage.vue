@@ -287,6 +287,35 @@
               </div>
             </div>
 
+            <!-- ICS feeds (read-only) -->
+            <div class="settings-subsection-label" style="margin-top: 20px">ICS feeds (read-only)</div>
+            <div v-if="calStore.icalSources.length" class="settings-row-group" style="margin-bottom: 8px">
+              <div v-for="src in calStore.icalSources" :key="src.id" class="settings-row">
+                <span class="settings-row-label">
+                  <span class="gcal-connected-dot"></span>
+                  {{ src.name }}
+                  <span class="source-type-badge">ICS</span>
+                </span>
+                <button class="btn sm danger" @click="calStore.disconnectIcal(src.id)">Remove</button>
+              </div>
+            </div>
+            <div class="settings-card">
+              <div class="settings-subsection-label" style="padding: 0; margin-bottom: 10px">Add ICS Feed</div>
+              <p class="settings-hint" style="margin-bottom: 10px">
+                Shows events from a published calendar (e.g. Outlook / Microsoft 365) so you can see conflicts when scheduling. Tasks are never written to these feeds.<br>
+                In Outlook on the web: <em>Settings → Calendar → Shared calendars → Publish a calendar</em>, then paste the <strong>ICS</strong> link. Treat the link as a secret.
+              </p>
+              <input type="url" v-model="icalUrl" placeholder="https://outlook.office365.com/owa/calendar/…/calendar.ics" aria-label="ICS feed URL">
+              <input type="text" v-model="icalName" placeholder="Name (optional, e.g. EPFL)" aria-label="Feed name" style="margin-top: 8px">
+              <div v-if="calStore.icalError" class="error-msg" role="alert" style="margin-top: 8px">{{ calStore.icalError }}</div>
+              <div v-if="icalNotice" class="settings-hint" style="margin-top: 8px">{{ icalNotice }}</div>
+              <div class="settings-actions" style="margin-top: 12px">
+                <button class="btn sm primary" :disabled="calStore.icalConnecting || !icalUrl.trim()" @click="addIcalSource">
+                  {{ calStore.icalConnecting ? 'Checking…' : 'Add feed' }}
+                </button>
+              </div>
+            </div>
+
             <!-- Target calendar (shown when any source connected) -->
             <div v-if="calStore.isConnected || calStore.caldavSources.length" class="settings-row-group" style="margin-top: 12px">
               <div class="settings-row">
@@ -584,6 +613,21 @@ const caldavServerUrl = ref('')
 const caldavUsername = ref('')
 const caldavPassword = ref('')
 const caldavName = ref('')
+
+// ── ICS feeds (read-only) ──
+const icalUrl = ref('')
+const icalName = ref('')
+const icalNotice = ref('')
+
+async function addIcalSource() {
+  icalNotice.value = ''
+  try {
+    const { eventCount } = await calStore.connectIcal(icalUrl.value, icalName.value)
+    icalNotice.value = `Added. Found ${eventCount} event${eventCount === 1 ? '' : 's'} in the next 90 days.`
+    icalUrl.value = ''
+    icalName.value = ''
+  } catch { /* error shown via calStore.icalError */ }
+}
 
 async function addCalDAVSource() {
   if (!caldavUsername.value || !caldavPassword.value) return
