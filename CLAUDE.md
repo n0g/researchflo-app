@@ -76,7 +76,9 @@ supabase/
   functions/
     _shared/
       caldav.ts             — shared CalDAV protocol utilities (used by caldav-proxy and mcp)
+      ical.ts               — read-only ICS feed fetch (SSRF-guarded) + parse with recurrence expansion (used by ical-proxy)
     caldav-proxy/           — server-side CalDAV proxy (discover, list, CRUD events)
+    ical-proxy/             — server-side ICS feed proxy (test, get_events); read-only
     google-calendar-auth/   — OAuth authorization redirect
     google-calendar-token/  — OAuth code exchange + token refresh
     hotcrp-proxy/           — HotCRP CORS proxy (adds Authorization header server-side)
@@ -165,6 +167,7 @@ All deployed to `https://oqqevpkeqcbkqrgabpkc.supabase.co/functions/v1/`.
 | Function | Purpose |
 |---|---|
 | `caldav-proxy` | Server-side CalDAV XML-over-HTTP proxy; actions: `discover`, `list_calendars`, `get_events`, `create_event`, `update_event`, `delete_event`. Reads credentials from `calendar_sources` by `source_id` or accepts inline creds for initial connection testing. |
+| `ical-proxy` | Fetches a user's ICS feed server-side (browsers can't: no CORS headers; URL is a secret) and returns events for a time range. Actions: `test` (inline `url`, validates before saving), `get_events` (`source_id`, `time_min`, `time_max`). Reads the feed URL from `calendar_sources` (`type='ical'`). |
 | `google-calendar-auth` | Generates OAuth authorization URL + PKCE/state |
 | `google-calendar-token` | Exchanges authorization code for tokens; refreshes expired tokens |
 | `hotcrp-proxy` | Adds `Authorization: Bearer` header server-side for HotCRP API requests |
@@ -220,6 +223,14 @@ Used by Claude via the MCP protocol. Auth: `Authorization: Bearer {mcp_token}` w
 - iCloud: uses well-known URL `https://caldav.icloud.com/.well-known/caldav` for discovery; requires app-specific password
 - Credentials stored in `calendar_sources` row with `type='caldav'` or `type='icloud'`
 - Multiple CalDAV sources can coexist; each is fetched in parallel in `loadCalDAVSources()`
+
+### ICS feeds (read-only)
+- Any number of published ICS feeds (e.g. Outlook / Microsoft 365 "Publish a calendar" links) can be added in Settings → ICS feeds. Used for EPFL, where Graph needs admin consent.
+- Stored as `calendar_sources` rows with `type='ical'`; the feed `url` is a secret. The store (`icalSources`) deliberately does not select `url`; only `ical-proxy` reads it.
+- `calendar.js` `loadWeekEvents` fetches each enabled feed via `ical-proxy`; events have `_sourceType: 'ical'` and `_calId: 'ical:<sourceId>'`, which never equals the write target, so the schedule UI shows them read-only. Task events are never written to feeds.
+- Parsing uses `ical.js` (`npm:ical.js@2.1.0`) in `_shared/ical.ts`: RRULE/EXDATE, RECURRENCE-ID overrides, VTIMEZONE blocks, with a Windows→IANA fallback for zone names like `W. Europe Standard Time`. Each occurrence gets a unique id `<uid>@<start>`.
+- Not yet used by the MCP server: `get_events` and `schedule_task` don't see ICS feeds.
+- Microsoft Graph (`type='microsoft'`, allowed by the schema but unimplemented) would need an Azure app registration plus EPFL admin consent; ICS is the fallback that works without it.
 
 ### Unified Target Calendar
 - `selectedTargetId` uses composite key format `google:::calId` or `caldav:::sourceId:::calHref`
@@ -336,3 +347,33 @@ The app is a **pipeline overview** used on MacBook and tablet. Key use cases:
 
 The MCP server connects to Claude Desktop/Claude.ai, enabling AI-assisted project management: list tasks, schedule them on the calendar, update project status — all from a Claude conversation.
 
+
+## Possible TODOs
+
+Ideas, not committed work. Open design questions are marked **Decide:**.
+
+### Student projects (not intended for publication)
+
+Track supervised student work (theses, course projects, internships) alongside research papers, without forcing it through the paper pipeline.
+
+- The current stages (Planning → … → Awaiting Reviews) and fields (`venue`, `submission_url`, HotCRP) assume a paper. Student projects need their own stage set, e.g. Scoping → Active → Writing up → Grading/Done → Archived.
+- Fields that make sense: the student (a `people` row, which already exists for uninvited people), supervision meeting cadence, and a deadline (defense or hand-in date). `venue` and `submission_url` don't apply and should be hidden.
+- Keep them out of "what am I publishing" views, and make it easy to filter them in or out of the sidebar and the stale indicator (a quiet student project is not the same signal as a stalled paper).
+- **Decide:** one board with a type filter, or a separate board per pipeline (see "Multiple pipelines" below).
+
+### Grant proposal pipeline
+
+A pipeline for proposals, parallel to the paper pipeline.
+
+- Example stages: Idea → Drafting → Internal review → Submitted → Under review → Awarded / Rejected.
+- Fields: funder/program (could reuse `venue`), amount, deadline (reuse `deadline`), collaborators/PIs (`project_members` already covers this), and the decision date.
+- Reuses most of the app: tasks, deadlines, energy, collaborators, calendar scheduling.
+
+### Multiple pipelines (shared groundwork for both)
+
+- Add a project type (e.g. `projects.kind`: `paper | student | grant`, default `paper`) and tie stage sets to it. `stages` currently has only `owner_id`, `name`, `slug`, `icon`, `sort_order`, so it needs a `kind` column or a separate `pipelines` table.
+- `DEFAULT_STAGES` in `lib/helpers.js` and the `rb_stages` localStorage cache are paper-only and would need to become per-kind.
+- Board and sidebar need a pipeline switcher or filter. `NewProjectPage.vue` needs a type picker.
+- MCP: `add_project`, `list_projects` and `update_project` need a `kind` parameter so Claude can file things in the right pipeline.
+- Existing projects must default to `paper` so nothing moves or disappears on migration.
+- **Decide:** whether stage history, the "stale >14 days" rule and the stage color tokens (`--stage-0` … `--stage-5`) should be per-pipeline.
