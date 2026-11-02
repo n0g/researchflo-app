@@ -52,6 +52,9 @@ export const useCalendarStore = defineStore('calendar', () => {
     isConnected.value || caldavSources.value.length > 0 || icalSources.value.length > 0
   )
 
+  // Task events can only be written to Google or CalDAV/iCloud; ICS feeds are view-only.
+  const hasWritableCalendar = computed(() => isConnected.value || caldavSources.value.length > 0)
+
   const writableCalendars = computed(() =>
     calendarList.value.filter(c => c.accessRole === 'writer' || c.accessRole === 'owner')
   )
@@ -823,7 +826,7 @@ export const useCalendarStore = defineStore('calendar', () => {
 
   return {
     clientId, events, loading, connectError, selectedCalendarId, selectedTargetId, targetCalHref,
-    calendarList, writableCalendars, allCalendars, isConnected, isAnyCalendarConnected, initializing, scheduledByTaskId, taskIdByEventUid,
+    calendarList, writableCalendars, allCalendars, isConnected, isAnyCalendarConnected, hasWritableCalendar, initializing, scheduledByTaskId, taskIdByEventUid,
     caldavSources, caldavCalendars, caldavConnecting, caldavError,
     icalSources, icalConnecting, icalError,
     saveClientId, saveCalendarId, saveTargetId, connect, disconnect, init, checkConnection,

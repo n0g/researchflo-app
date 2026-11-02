@@ -70,12 +70,12 @@
             </div>
           </div>
           <div ref="taskListBodyEl" class="triage-list-body" role="listbox" aria-label="Tasks">
-            <div v-if="!calStore.isAnyCalendarConnected && !calStore.initializing" class="cal-mobile-notice">
+            <div v-if="!calStore.hasWritableCalendar && !calStore.initializing" class="cal-mobile-notice">
               <i class="ph ph-calendar" aria-hidden="true"></i>
-              <span>{{ calStore.clientId ? 'Calendar session expired' : 'Connect Google Calendar to schedule tasks' }}</span>
-              <button class="btn sm primary" @click="calStore.clientId ? calStore.connect() : goSettings()">
-                {{ calStore.clientId ? 'Reconnect' : 'Settings' }}
-              </button>
+              <span>{{ calStore.isAnyCalendarConnected
+                ? 'Only read-only calendars connected. Add Google or CalDAV to schedule tasks'
+                : 'No calendar connected' }}</span>
+              <button class="btn sm primary" @click="goSettings()">Settings</button>
             </div>
             <template v-if="calStore.initializing">
               <div v-for="i in 5" :key="i" class="schedule-skeleton-row"></div>
@@ -169,15 +169,17 @@
           <template v-if="!calStore.isAnyCalendarConnected && !calStore.initializing">
             <div class="cal-not-connected">
               <i class="ph ph-calendar" aria-hidden="true"></i>
-              <p>{{ calStore.clientId ? 'Session expired — reconnect to continue' : 'Connect Google Calendar to schedule tasks' }}</p>
+              <p>No calendar connected. Connect one in Settings to schedule tasks.</p>
               <p v-if="calStore.connectError" class="cal-connect-error">{{ calStore.connectError }}</p>
-              <button class="btn primary" @click="calStore.clientId ? calStore.connect() : goSettings()">
-                {{ calStore.clientId ? 'Reconnect' : 'Open Settings' }}
-              </button>
-              <button v-if="calStore.clientId" class="btn" style="margin-top: 8px" @click="goSettings">Settings</button>
+              <button class="btn primary" @click="goSettings">Open Settings</button>
+              <button class="btn" style="margin-top: 8px" @click="calStore.connect()">Reconnect Google</button>
             </div>
           </template>
           <template v-else>
+            <div v-if="!calStore.hasWritableCalendar && !calStore.initializing" class="cal-readonly-note">
+              <i class="ph ph-eye" aria-hidden="true"></i>
+              View only. Add a Google or CalDAV calendar in Settings to schedule tasks.
+            </div>
             <!-- Week navigation -->
             <div class="cal-nav">
               <div class="cal-month-label">
@@ -443,7 +445,7 @@ function focusTaskRow(idx) {
 }
 
 function scheduleTaskByKey(task) {
-  if (calStore.isAnyCalendarConnected) {
+  if (calStore.hasWritableCalendar) {
     store.pendingScheduleTask = task
     f7.view.current.router.navigate('/schedule/place/')
   } else {
@@ -734,7 +736,7 @@ function onTaskTouchEnd(e, task) {
   if (!t) return
   if (Math.abs(t.clientX - _taskTapStartX) > 10 || Math.abs(t.clientY - _taskTapStartY) > 10) return
   e.preventDefault()  // suppress synthesized click
-  if (calStore.isAnyCalendarConnected) {
+  if (calStore.hasWritableCalendar) {
     store.pendingScheduleTask = task
     f7.view.current.router.navigate('/schedule/place/')
   } else {
@@ -843,7 +845,7 @@ async function onPointerUp() {
   draggingCalEvent.value = null
   hoveredSlot.value = null
 
-  if (!slot || !calStore.isAnyCalendarConnected || isPastDueDrop) return
+  if (!slot || !calStore.hasWritableCalendar || isPastDueDrop) return
 
   const [year, month, day] = slot.dateStr.split('-').map(Number)
 

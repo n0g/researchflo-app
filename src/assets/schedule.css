@@ -572,6 +572,19 @@ html[data-theme="dark"] .sched-search-input:focus { outline: none; box-shadow: n
 .cal-not-connected p { font-size: 15px; margin: 0; color: var(--text2); }
 .cal-connect-error { color: var(--danger, #e53e3e) !important; font-size: 13px !important; }
 
+/* View-only note (only read-only calendars connected) */
+.cal-readonly-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  font-size: 12px;
+  color: var(--text2);
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+}
+.cal-readonly-note .ph { font-size: 16px; flex-shrink: 0; }
+
 /* Week navigation bar */
 .cal-nav {
   display: flex;

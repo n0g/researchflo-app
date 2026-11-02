@@ -9,7 +9,7 @@
         <span class="place-task-label">{{ store.pendingScheduleTask?.content }}</span>
       </div>
 
-      <template v-if="calStore.isConnected">
+      <template v-if="calStore.isAnyCalendarConnected">
         <div class="cal-nav">
           <div class="cal-month-label">
             <span class="cal-month-name">{{ monthLabel.month }}</span>
@@ -95,10 +95,9 @@
 
       <div v-else class="cal-not-connected">
         <i class="ph ph-calendar" aria-hidden="true"></i>
-        <p>{{ calStore.clientId ? 'Session expired — reconnect to continue' : 'Connect Google Calendar in Settings' }}</p>
-        <button class="btn primary" @click="calStore.clientId ? calStore.connect() : goSettings()">
-          {{ calStore.clientId ? 'Reconnect' : 'Settings' }}
-        </button>
+        <p>No calendar connected. Connect one in Settings.</p>
+        <button class="btn primary" @click="goSettings()">Settings</button>
+        <button class="btn" @click="calStore.connect()">Reconnect Google</button>
       </div>
 
     </div>
@@ -273,7 +272,7 @@ function goSettings() { f7.tab.show('#view-settings') }
 
 onMounted(async () => {
   if (!store.pendingScheduleTask) { f7.view.current.router.back(); return }
-  if (calStore.isConnected) {
+  if (calStore.isAnyCalendarConnected) {
     calStore.loadWeekEvents(weekStart.value)
     await nextTick()
     if (calBodyEl.value) {
