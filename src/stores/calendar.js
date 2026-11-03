@@ -565,6 +565,10 @@ export const useCalendarStore = defineStore('calendar', () => {
         return
       }
 
+      // A CalDAV calendar URL whose source isn't loaded yet (cold page load) is not a Google
+      // calendar id; asking Google would 404 and wrongly clear the task's schedule link.
+      if (/^https?:\/\//i.test(calId)) return
+
       // Google Calendar
       const token = await _ensureToken()
       if (!token) return
@@ -802,6 +806,10 @@ export const useCalendarStore = defineStore('calendar', () => {
         } catch { /* network error — skip, don't clear */ }
         return
       }
+
+      // A CalDAV calendar URL whose source isn't loaded yet (cold page load) is not a Google
+      // calendar id; asking Google would 404 and wrongly clear the task's schedule link.
+      if (/^https?:\/\//i.test(calId)) return
 
       // Google Calendar
       const token = await _ensureToken()
