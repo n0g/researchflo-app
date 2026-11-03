@@ -232,6 +232,12 @@ Used by Claude via the MCP protocol. Auth: `Authorization: Bearer {mcp_token}` w
 - Not yet used by the MCP server: `get_events` and `schedule_task` don't see ICS feeds.
 - Microsoft Graph (`type='microsoft'`, allowed by the schema but unimplemented) would need an Azure app registration plus EPFL admin consent; ICS is the fallback that works without it.
 
+### CalDAV event reading (`_shared/caldav.ts`)
+- `getCalendarEvents` runs a `calendar-query` REPORT and parses results with `_shared/ical.ts`, so recurring events (RRULE/EXDATE/overrides) are expanded into the requested window. Non-recurring events keep their real UID (tasks link to events by it); occurrences get `<uid>@<start>`.
+- Stalwart lists some events in the REPORT answer with `200 OK` but an empty `<calendar-data>`. Those are fetched one by one with GET (max 40 per calendar) and parsed. Results are cached in the isolate by `username|url|etag`; a changed event has a new etag, and the username in the key stops one account's cached data reaching another.
+- The function logs a `caldav get_events {...}` line per query with counts only (no event content), useful for debugging via the Supabase logs.
+- Server URL for CalDAV sources must point at a DAV endpoint or `/.well-known/caldav`; a bare site root often answers 405 to PROPFIND.
+
 ### Unified Target Calendar
 - `selectedTargetId` uses composite key format `google:::calId` or `caldav:::sourceId:::calHref`
 - `:::` separator chosen because it can't appear in either calendar IDs or URLs
@@ -377,3 +383,10 @@ A pipeline for proposals, parallel to the paper pipeline.
 - MCP: `add_project`, `list_projects` and `update_project` need a `kind` parameter so Claude can file things in the right pipeline.
 - Existing projects must default to `paper` so nothing moves or disappears on migration.
 - **Decide:** whether stage history, the "stale >14 days" rule and the stage color tokens (`--stage-0` … `--stage-5`) should be per-pipeline.
+
+### JMAP calendar source (optional, for Stalwart)
+
+- Stalwart implements JMAP for Calendars (`urn:ietf:params:jmap:calendars`), which could replace CalDAV for that server: JSON instead of XML/ICS, batched requests, server-side recurrence expansion, and state-based delta sync. It would also remove the empty-`calendar-data` workaround.
+- It would be an additional source type next to Google, CalDAV/iCloud and ICS, not a replacement: only Stalwart (and possibly Fastmail) speak it. It needs its own Edge Function, store branch, settings form and MCP support.
+- Risks: the spec is still an Internet-Draft (draft-28, August 2026), and it is unverified whether Stalwart preserves a custom property for the task link that `X-RESEARCHBOARD-TASK-ID` provides today.
+- Worth doing if load time on the CalDAV path still bothers after the etag cache. First step: check `https://n0g.at/.well-known/jmap` and the account's advertised capabilities.

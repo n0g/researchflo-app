@@ -9,6 +9,8 @@ import ICAL from 'npm:ical.js@2.1.0'
 
 export interface IcalEvent {
   uid: string          // unique per occurrence: "<uid>@<start>"
+  baseUid: string      // the event's own UID (shared by all occurrences of a series)
+  recurring: boolean   // true for series occurrences and their overrides
   summary: string
   description: string
   location: string
@@ -194,7 +196,11 @@ export function parseIcs(
   timeMax: Date,
   fallbackTz: string | null = null,
 ): { name: string | null; events: IcalEvent[] } {
-  const comp = new ICAL.Component(ICAL.parse(icsText))
+  // ical.js throws on anything before BEGIN:VCALENDAR (BOM, or the newline/indent that
+  // CalDAV servers leave around <calendar-data> in XML), so cut to the real start.
+  const startIdx = icsText.search(/BEGIN:VCALENDAR/i)
+  const cleaned = (startIdx > 0 ? icsText.slice(startIdx) : icsText).replace(/^\uFEFF/, '').trimEnd()
+  const comp = new ICAL.Component(ICAL.parse(cleaned))
   const name = (comp.getFirstPropertyValue('x-wr-calname') as string | null) ?? null
 
   // Register the feed's own time zone definitions (single synchronous pass, so
@@ -230,7 +236,7 @@ export function parseIcs(
     }
 
     // deno-lint-ignore no-explicit-any
-    const push = (ev: any, startT: AnyTime, endT: AnyTime) => {
+    const push = (ev: any, startT: AnyTime, endT: AnyTime, recurring = false) => {
       if (out.length >= MAX_EVENTS) return
       const startTz = tzidOf(ev.component, 'dtstart')
       const endTz = tzidOf(ev.component, 'dtend') ?? startTz
@@ -252,6 +258,8 @@ export function parseIcs(
       if (sMs >= maxMs) return
       out.push({
         uid: `${ev.uid}@${start}`,
+        baseUid: ev.uid,
+        recurring,
         summary: ev.summary ?? '',
         description: ev.description ?? '',
         location: ev.location ?? '',
@@ -262,7 +270,7 @@ export function parseIcs(
     for (const ev of singles) push(ev, ev.startDate, ev.endDate)
     for (const ev of orphanExceptions) push(ev, ev.startDate, ev.endDate)
     // Overrides of recurring events (including ones moved into the window).
-    for (const ev of exceptions) if (masters.has(ev.uid)) push(ev, ev.startDate, ev.endDate)
+    for (const ev of exceptions) if (masters.has(ev.uid)) push(ev, ev.startDate, ev.endDate, true)
 
     for (const master of masters.values()) {
       const it = master.iterator()
@@ -274,7 +282,7 @@ export function parseIcs(
         if (approxMs > maxMs + 2 * 86_400_000) break
         const d = master.getOccurrenceDetails(next)
         if (d.item !== master) continue // overridden; emitted above
-        push(master, d.startDate, d.endDate)
+        push(master, d.startDate, d.endDate, true)
       }
     }
 

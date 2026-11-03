@@ -1,5 +1,7 @@
 // Shared CalDAV protocol utilities used by caldav-proxy and mcp Edge Functions.
 
+import { parseIcs } from './ical.ts'
+
 export function basicAuth(username: string, password: string): string {
   return 'Basic ' + btoa(`${username}:${password}`)
 }
@@ -212,17 +214,85 @@ export function parseCalendarListXML(xml: string, baseUrl: string): CalDAVCalend
   return calendars
 }
 
-export function parseEventsXML(xml: string): CalDAVEvent[] {
-  const events: CalDAVEvent[] = []
-  const calDataRe = /<[A-Za-z0-9]*:?calendar-data[^>]*>([\s\S]*?)<\/[A-Za-z0-9]*:?calendar-data>/gi
+// Pulls each <calendar-data> payload (one ICS object per resource) out of a multistatus body.
+function extractCalendarData(xml: string): string[] {
+  const out: string[] = []
+  // Alternation handles self-closing <calendar-data/> so it can't swallow the next response.
+  const calDataRe = /<[A-Za-z0-9]*:?calendar-data\b[^>]*?(?:\/>|>([\s\S]*?)<\/[A-Za-z0-9]*:?calendar-data>)/gi
   let match
   while ((match = calDataRe.exec(xml)) !== null) {
-    const ics = match[1]
-      .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
-      .replace(/&#10;/g, '\n').replace(/&#13;/g, '\r')
-    events.push(...parseVEvents(ics))
+    if (match[1] === undefined) continue // self-closing: no payload
+    out.push(
+      match[1]
+        .replace(/^\s*<!\[CDATA\[/, '').replace(/\]\]>\s*$/, '') // some servers wrap the ICS in CDATA
+        .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+        .replace(/&#10;/g, '\n').replace(/&#13;/g, '\r')
+        .replace(/&amp;/g, '&'),
+    )
   }
-  return events
+  return out
+}
+
+export function parseEventsXML(xml: string): CalDAVEvent[] {
+  return extractCalendarData(xml).flatMap(parseVEvents)
+}
+
+// Like parseEventsXML, but expands recurring events (RRULE/EXDATE/overrides) into the
+// requested window. The plain parser reports a series once, at its original start date,
+// so a weekly meeting that began months ago never appears in the current week.
+export function parseEventsXMLInRange(xml: string, timeMin: Date, timeMax: Date): CalDAVEvent[] {
+  return extractCalendarData(xml).flatMap(ics => icsToEvents(ics, timeMin, timeMax))
+}
+
+/** One ICS object → events inside [timeMin, timeMax], with recurrence expanded. */
+function icsToEvents(ics: string, timeMin: Date, timeMax: Date): CalDAVEvent[] {
+  if (!ics.trim()) return []
+  try {
+    const { events } = parseIcs(ics, timeMin, timeMax)
+    return events.map(e => ({
+      // Keep the real UID for single events: tasks link to calendar events by it.
+      uid: e.recurring ? e.uid : e.baseUid,
+      summary: e.summary,
+      description: e.description,
+      start: e.start,
+      end: e.end,
+      isAllDay: e.isAllDay,
+    }))
+  } catch (err) {
+    // Log structure only (message + first characters), never event content.
+    console.error('ICS parse failed, using basic parser:', err instanceof Error ? err.message : err, JSON.stringify(ics.slice(0, 24)))
+    return parseVEvents(ics)
+  }
+}
+
+// Fetched ICS bodies by user + resource URL + etag. An etag changes whenever the event does,
+// so a hit is always current. Keyed by username so one account's permissions never leak
+// to another through the shared isolate.
+const icsCache = new Map<string, string>()
+const ICS_CACHE_MAX = 500
+function icsCacheSet(key: string, ics: string) {
+  if (icsCache.size >= ICS_CACHE_MAX) icsCache.delete(icsCache.keys().next().value!)
+  icsCache.set(key, ics)
+}
+
+/**
+ * Some servers (Stalwart, for some resources) list an event in a calendar-query answer with
+ * 200 OK but an empty <calendar-data>. Returns the absolute URLs of those resources so the
+ * caller can fetch them one by one.
+ */
+export function emptyResourceUrls(xml: string, baseUrl: string): { url: string; etag: string | null }[] {
+  const urls: { url: string; etag: string | null }[] = []
+  for (const block of xml.match(/<[A-Za-z0-9]*:?response[\s>][\s\S]*?<\/[A-Za-z0-9]*:?response>/gi) ?? []) {
+    if (!extractCalendarData(block).some(p => !p.trim())) continue
+    const h = block.match(/<[A-Za-z0-9]*:?href[^>]*>([^<]+)<\/[A-Za-z0-9]*:?href>/i)
+    if (!h) continue
+    const href = h[1].trim().replace(/&amp;/g, '&')
+    if (href.endsWith('/')) continue // a collection, not an event
+    const etag = block.match(/<[A-Za-z0-9]*:?getetag[^>]*>([^<]*)<\/[A-Za-z0-9]*:?getetag>/i)?.[1].trim() || null
+    try { urls.push({ url: new URL(href, baseUrl).toString(), etag }) } catch { /* skip */ }
+  }
+  return urls
 }
 
 // ── CalDAV Protocol Operations ───────────────────────────────────────────────
@@ -314,7 +384,50 @@ export async function getCalendarEvents(
     return []
   }
   const xml = await res.text()
-  return parseEventsXML(xml)
+  const payloads = extractCalendarData(xml)
+  const events = parseEventsXMLInRange(xml, timeMin, timeMax)
+
+  // Fallback: fetch events that were listed with empty calendar-data one by one.
+  const resources = emptyResourceUrls(xml, calHref).slice(0, 40)
+  const fallback = { empties: resources.length, cached: 0, nonEmpty: 0, statuses: {} as Record<string, number> }
+  if (resources.length) {
+    const fetched = await Promise.all(resources.map(async ({ url, etag }) => {
+      const key = etag ? `${username}|${url}|${etag}` : null
+      const hit = key ? icsCache.get(key) : undefined
+      if (hit !== undefined) return { status: 200, text: hit, cached: true }
+      try {
+        const r = await caldavRequest(url, 'GET', username, password, undefined, { Accept: 'text/calendar, */*' })
+        const text = r.ok ? await r.text() : ''
+        if (key && text.trim()) icsCacheSet(key, text)
+        return { status: r.status, text, cached: false }
+      } catch {
+        return { status: 0, text: '', cached: false }
+      }
+    }))
+    for (const f of fetched) {
+      if (f.cached) fallback.cached++
+      fallback.statuses[f.status] = (fallback.statuses[f.status] ?? 0) + 1
+      if (f.text.trim()) {
+        fallback.nonEmpty++
+        events.push(...icsToEvents(f.text, timeMin, timeMax))
+      }
+    }
+  }
+
+  // Diagnostics: counts and app-generated UIDs only, never event content.
+  console.log('caldav get_events', JSON.stringify({
+    status: res.status,
+    xmlLen: xml.length,
+    responses: (xml.match(/<[A-Za-z0-9]*:?response[\s>]/gi) ?? []).length,
+    payloads: payloads.length,
+    emptyPayloads: payloads.filter(p => !p.trim()).length,
+    fallback,
+    vevents: (xml.match(/BEGIN:VEVENT/g) ?? []).length,
+    rrules: (xml.match(/RRULE/g) ?? []).length,
+    parsed: events.length,
+    ours: (xml.match(/UID:[^\r\n<&]*@researchflo\.app/g) ?? []).slice(0, 5),
+  }))
+  return events
 }
 
 // ── ICS Builder ─────────────────────────────────────────────────────────────
