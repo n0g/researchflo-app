@@ -384,11 +384,22 @@ function toggleProject(id) {
   activeProjectId.value = activeProjectId.value === id ? null : id
 }
 
+// Projects in the "On Ice" stage are parked: their unscheduled tasks are hidden from this list
+// (tasks already placed on the calendar stay visible so they can still be moved or removed).
+const onIceProjectIds = computed(() =>
+  new Set(
+    store.displayProjects
+      .filter(p => (store.projectStage(p.id)?.name || '').trim().toLowerCase() === 'on ice')
+      .map(p => p.id)
+  )
+)
+
 const allTasks = computed(() => {
   const projectSet = new Set(store.displayProjects.map(p => p.id))
   return store.tasks.filter(t =>
     !t.is_completed &&
     (t.project_id === null || projectSet.has(t.project_id)) &&
+    !(onIceProjectIds.value.has(t.project_id) && !scheduledIso(t)) &&
     !store.excludedSectionIds.has(t.section_id) &&
     (t.assigned_to === null || t.assigned_to === store.myPeopleId)
   )
