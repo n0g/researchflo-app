@@ -115,6 +115,7 @@ export interface CalDAVEvent {
   start: string    // ISO 8601
   end: string      // ISO 8601
   isAllDay: boolean
+  href?: string    // absolute URL of the resource the event lives in (needed to edit it)
 }
 
 function unfold(ics: string): string {
@@ -238,13 +239,6 @@ export function parseEventsXML(xml: string): CalDAVEvent[] {
   return extractCalendarData(xml).flatMap(parseVEvents)
 }
 
-// Like parseEventsXML, but expands recurring events (RRULE/EXDATE/overrides) into the
-// requested window. The plain parser reports a series once, at its original start date,
-// so a weekly meeting that began months ago never appears in the current week.
-export function parseEventsXMLInRange(xml: string, timeMin: Date, timeMax: Date): CalDAVEvent[] {
-  return extractCalendarData(xml).flatMap(ics => icsToEvents(ics, timeMin, timeMax))
-}
-
 /** One ICS object → events inside [timeMin, timeMax], with recurrence expanded. */
 function icsToEvents(ics: string, timeMin: Date, timeMax: Date): CalDAVEvent[] {
   if (!ics.trim()) return []
@@ -266,6 +260,24 @@ function icsToEvents(ics: string, timeMin: Date, timeMax: Date): CalDAVEvent[] {
   }
 }
 
+interface DavResource { url: string; etag: string | null; payload: string }
+
+/** Splits a multistatus body into resources (event objects), skipping collections. */
+function parseResources(xml: string, baseUrl: string): DavResource[] {
+  const out: DavResource[] = []
+  for (const block of xml.match(/<[A-Za-z0-9]*:?response[\s>][\s\S]*?<\/[A-Za-z0-9]*:?response>/gi) ?? []) {
+    const h = block.match(/<[A-Za-z0-9]*:?href[^>]*>([^<]+)<\/[A-Za-z0-9]*:?href>/i)
+    if (!h) continue
+    const href = h[1].trim().replace(/&amp;/g, '&')
+    if (href.endsWith('/')) continue // a collection, not an event
+    let url: string
+    try { url = new URL(href, baseUrl).toString() } catch { continue }
+    const etag = block.match(/<[A-Za-z0-9]*:?getetag[^>]*>([^<]*)<\/[A-Za-z0-9]*:?getetag>/i)?.[1].trim() || null
+    out.push({ url, etag, payload: extractCalendarData(block)[0] ?? '' })
+  }
+  return out
+}
+
 // Fetched ICS bodies by user + resource URL + etag. An etag changes whenever the event does,
 // so a hit is always current. Keyed by username so one account's permissions never leak
 // to another through the shared isolate.
@@ -274,25 +286,6 @@ const ICS_CACHE_MAX = 500
 function icsCacheSet(key: string, ics: string) {
   if (icsCache.size >= ICS_CACHE_MAX) icsCache.delete(icsCache.keys().next().value!)
   icsCache.set(key, ics)
-}
-
-/**
- * Some servers (Stalwart, for some resources) list an event in a calendar-query answer with
- * 200 OK but an empty <calendar-data>. Returns the absolute URLs of those resources so the
- * caller can fetch them one by one.
- */
-export function emptyResourceUrls(xml: string, baseUrl: string): { url: string; etag: string | null }[] {
-  const urls: { url: string; etag: string | null }[] = []
-  for (const block of xml.match(/<[A-Za-z0-9]*:?response[\s>][\s\S]*?<\/[A-Za-z0-9]*:?response>/gi) ?? []) {
-    if (!extractCalendarData(block).some(p => !p.trim())) continue
-    const h = block.match(/<[A-Za-z0-9]*:?href[^>]*>([^<]+)<\/[A-Za-z0-9]*:?href>/i)
-    if (!h) continue
-    const href = h[1].trim().replace(/&amp;/g, '&')
-    if (href.endsWith('/')) continue // a collection, not an event
-    const etag = block.match(/<[A-Za-z0-9]*:?getetag[^>]*>([^<]*)<\/[A-Za-z0-9]*:?getetag>/i)?.[1].trim() || null
-    try { urls.push({ url: new URL(href, baseUrl).toString(), etag }) } catch { /* skip */ }
-  }
-  return urls
 }
 
 // ── CalDAV Protocol Operations ───────────────────────────────────────────────
@@ -384,24 +377,33 @@ export async function getCalendarEvents(
     return []
   }
   const xml = await res.text()
-  const payloads = extractCalendarData(xml)
-  const events = parseEventsXMLInRange(xml, timeMin, timeMax)
+  const resources = parseResources(xml, calHref)
+  const events: CalDAVEvent[] = []
+  const toFetch: DavResource[] = []
 
-  // Fallback: fetch events that were listed with empty calendar-data one by one.
-  const resources = emptyResourceUrls(xml, calHref).slice(0, 40)
-  const fallback = { empties: resources.length, cached: 0, nonEmpty: 0, statuses: {} as Record<string, number> }
-  if (resources.length) {
-    const fetched = await Promise.all(resources.map(async ({ url, etag }) => {
+  for (const r of resources) {
+    if (r.payload.trim()) {
+      events.push(...icsToEvents(r.payload, timeMin, timeMax).map(e => ({ ...e, href: r.url })))
+    } else {
+      toFetch.push(r)
+    }
+  }
+
+  // Some servers (Stalwart, for events created via JMAP) list an event with 200 OK but an empty
+  // <calendar-data>. Fetch those one by one (cached by etag).
+  const fallback = { empties: toFetch.length, cached: 0, nonEmpty: 0, statuses: {} as Record<string, number> }
+  if (toFetch.length) {
+    const fetched = await Promise.all(toFetch.slice(0, 40).map(async ({ url, etag }) => {
       const key = etag ? `${username}|${url}|${etag}` : null
       const hit = key ? icsCache.get(key) : undefined
-      if (hit !== undefined) return { status: 200, text: hit, cached: true }
+      if (hit !== undefined) return { url, status: 200, text: hit, cached: true }
       try {
         const r = await caldavRequest(url, 'GET', username, password, undefined, { Accept: 'text/calendar, */*' })
         const text = r.ok ? await r.text() : ''
         if (key && text.trim()) icsCacheSet(key, text)
-        return { status: r.status, text, cached: false }
+        return { url, status: r.status, text, cached: false }
       } catch {
-        return { status: 0, text: '', cached: false }
+        return { url, status: 0, text: '', cached: false }
       }
     }))
     for (const f of fetched) {
@@ -409,7 +411,7 @@ export async function getCalendarEvents(
       fallback.statuses[f.status] = (fallback.statuses[f.status] ?? 0) + 1
       if (f.text.trim()) {
         fallback.nonEmpty++
-        events.push(...icsToEvents(f.text, timeMin, timeMax))
+        events.push(...icsToEvents(f.text, timeMin, timeMax).map(e => ({ ...e, href: f.url })))
       }
     }
   }
@@ -418,16 +420,66 @@ export async function getCalendarEvents(
   console.log('caldav get_events', JSON.stringify({
     status: res.status,
     xmlLen: xml.length,
-    responses: (xml.match(/<[A-Za-z0-9]*:?response[\s>]/gi) ?? []).length,
-    payloads: payloads.length,
-    emptyPayloads: payloads.filter(p => !p.trim()).length,
+    resources: resources.length,
     fallback,
-    vevents: (xml.match(/BEGIN:VEVENT/g) ?? []).length,
-    rrules: (xml.match(/RRULE/g) ?? []).length,
     parsed: events.length,
     ours: (xml.match(/UID:[^\r\n<&]*@researchflo\.app/g) ?? []).slice(0, 5),
   }))
   return events
+}
+
+// ── Moving an existing event ────────────────────────────────────────────────
+
+function foldLine(line: string): string {
+  if (line.length <= 75) return line
+  const parts: string[] = [line.slice(0, 75)]
+  for (let i = 75; i < line.length; i += 74) parts.push(' ' + line.slice(i, i + 74))
+  return parts.join('\r\n')
+}
+
+/**
+ * Returns `ics` with only the event's start/end changed (written as UTC), keeping every other
+ * property (attendees, alarms, description, custom X- properties) as it was. Refuses recurring
+ * events and objects with more than one VEVENT, since moving one part of a series needs
+ * override handling this does not implement.
+ */
+export function shiftEventICS(ics: string, newStart: Date, newEnd: Date): string {
+  const lines = unfold(ics).split(/\r?\n/).filter(l => l.trim() !== '')
+  const names = lines.map(l => l.split(/[:;]/, 1)[0].toUpperCase())
+  if (names.filter(n => n === 'BEGIN').length && lines.filter(l => l.toUpperCase() === 'BEGIN:VEVENT').length !== 1) {
+    throw new Error('This item has several parts and cannot be moved from here')
+  }
+  if (names.some(n => n === 'RRULE' || n === 'RDATE' || n === 'RECURRENCE-ID')) {
+    throw new Error('Recurring events cannot be moved from here')
+  }
+  const fmt = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z')
+
+  const out: string[] = []
+  let inEvent = false
+  let sawStart = false
+  let wroteEnd = false
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const name = names[i]
+    const upper = line.toUpperCase()
+    if (upper === 'BEGIN:VEVENT') inEvent = true
+    if (inEvent && name === 'DTSTART') { out.push(`DTSTART:${fmt(newStart)}`); sawStart = true; continue }
+    if (inEvent && (name === 'DTEND' || name === 'DURATION')) {
+      if (!wroteEnd) { out.push(`DTEND:${fmt(newEnd)}`); wroteEnd = true }
+      continue
+    }
+    if (inEvent && name === 'SEQUENCE') {
+      out.push(`SEQUENCE:${(parseInt(line.slice(line.indexOf(':') + 1), 10) || 0) + 1}`)
+      continue
+    }
+    if (upper === 'END:VEVENT') {
+      if (!wroteEnd) { out.push(`DTEND:${fmt(newEnd)}`); wroteEnd = true }
+      inEvent = false
+    }
+    out.push(line)
+  }
+  if (!sawStart) throw new Error('Event has no start time')
+  return out.map(foldLine).join('\r\n') + '\r\n'
 }
 
 // ── ICS Builder ─────────────────────────────────────────────────────────────

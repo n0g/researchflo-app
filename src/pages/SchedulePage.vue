@@ -876,6 +876,8 @@ async function onPointerUp() {
       await calStore.updateEvent(calEv.id, calEv._calId, newStart, newEnd)
     } catch (err) {
       console.error('Failed to move event:', err)
+      f7.toast.show({ text: `Couldn't move event: ${err.message || 'unknown error'}`, closeTimeout: 4000, position: 'center' })
+      calStore.loadWeekEvents(weekStart.value) // snap the calendar back to the server's state
     }
   }
 }

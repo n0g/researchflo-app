@@ -476,6 +476,7 @@ export const useCalendarStore = defineStore('calendar', () => {
                   end: ev.isAllDay ? { date: ev.end } : { dateTime: ev.end },
                   _calColor: cal.color || null,
                   _calId: cal.href,
+                  _href: ev.href || null, // the event's own address on the server, needed to edit it
                   _sourceType: src.type,
                   _sourceId: src.id,
                 }))
@@ -718,6 +719,31 @@ export const useCalendarStore = defineStore('calendar', () => {
   }
 
   async function updateEvent(eventId, calId, newStart, newEnd) {
+    // CalDAV / iCloud: change only the event's times on the server (keeps all other properties).
+    const existing = events.value.find(e => e.id === eventId)
+    if (existing && existing._sourceType && existing._sourceType !== 'google') {
+      if (existing._sourceType === 'ical') throw new Error('This calendar is read-only')
+      const eventHref = existing._href
+        || (calId.endsWith('/') ? `${calId}${existing.id}.ics` : `${calId}/${existing.id}.ics`)
+      await _caldavProxy('move_event', {
+        source_id: existing._sourceId,
+        event_href: eventHref,
+        start_iso: newStart.toISOString(),
+        end_iso: newEnd.toISOString(),
+      })
+      const idx = events.value.findIndex(e => e.id === eventId)
+      if (idx !== -1) {
+        events.value[idx] = {
+          ...events.value[idx],
+          start: { dateTime: newStart.toISOString() },
+          end: { dateTime: newEnd.toISOString() },
+        }
+      }
+      const taskId = taskIdByEventUid.value.get(eventId)
+      if (taskId) await useBoardStore().saveScheduledTime(taskId, newStart.toISOString())
+      return
+    }
+
     const token = await _ensureToken()
     if (!token) throw new Error('Not authenticated')
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone

@@ -5,6 +5,7 @@ import {
   getCalendarEvents,
   buildICS,
   caldavRequest,
+  shiftEventICS,
 } from '../_shared/caldav.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
@@ -123,6 +124,35 @@ Deno.serve(async (req) => {
           return json({ error: `DELETE failed: ${res.status}` }, res.status)
         }
         return json({ ok: true })
+      }
+
+      case 'move_event': {
+        // Change only an existing event's start/end, keeping everything else in its ICS.
+        const { event_href, start_iso, end_iso } = body
+        if (!event_href || !start_iso || !end_iso) {
+          return json({ error: 'Missing event_href, start_iso, or end_iso' }, 400)
+        }
+        const start = new Date(start_iso)
+        const end = new Date(end_iso)
+        if (isNaN(start.getTime()) || isNaN(end.getTime()) || end < start) {
+          return json({ error: 'Invalid start or end time' }, 400)
+        }
+        const getRes = await caldavRequest(event_href, 'GET', creds.username, creds.password)
+        if (getRes.status === 404 || getRes.status === 410) return json({ error: 'Event not found on the server' }, 404)
+        if (!getRes.ok) return json({ error: `GET failed: ${getRes.status}` }, getRes.status)
+        const etag = getRes.headers.get('ETag')
+        let updated: string
+        try {
+          updated = shiftEventICS(await getRes.text(), start, end)
+        } catch (e) {
+          return json({ error: (e as Error).message }, 422)
+        }
+        const extra: Record<string, string> = { 'Content-Type': 'text/calendar; charset=utf-8' }
+        if (etag) extra['If-Match'] = etag
+        const putRes = await caldavRequest(event_href, 'PUT', creds.username, creds.password, updated, extra)
+        if (putRes.status === 412) return json({ error: 'The event changed on the server. Reload and try again.' }, 409)
+        if (!putRes.ok && putRes.status !== 204) return json({ error: `PUT failed: ${putRes.status}` }, putRes.status)
+        return json({ etag: putRes.headers.get('ETag') })
       }
 
       case 'get_event': {
