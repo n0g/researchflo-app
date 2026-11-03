@@ -415,9 +415,17 @@ export const useCalendarStore = defineStore('calendar', () => {
     } catch {}
   }
 
+  // Incremented per loadWeekEvents call; a run that has been superseded must not overwrite
+  // newer results or trigger reconciliation from a stale/partial event list.
+  let _loadSeq = 0
+
   async function loadWeekEvents(weekStart) {
     if (!calendarList.value.length && isConnected.value) await fetchCalendarList()
     loading.value = true
+    const seq = ++_loadSeq
+    // CalDAV calendars whose event query succeeded in THIS run. Reconciliation only trusts a
+    // calendar's event list if it is in here; a failed/slow query must not look like deletions.
+    const loadedCalHrefs = new Set()
     try {
       const timeMin = new Date(weekStart)
       timeMin.setHours(0, 0, 0, 0)
@@ -468,6 +476,7 @@ export const useCalendarStore = defineStore('calendar', () => {
                   time_min: timeMin.toISOString(),
                   time_max: timeMax.toISOString(),
                 })
+                loadedCalHrefs.add(cal.href)
                 return (result.events || []).map(ev => ({
                   id: ev.uid,
                   summary: ev.summary || '(No title)',
@@ -521,16 +530,21 @@ export const useCalendarStore = defineStore('calendar', () => {
         }
       }
 
+      if (seq !== _loadSeq) return // superseded: the newer run sets events and reconciles
       events.value = allEvents.sort(
         (a, b) => new Date(a.start?.dateTime || a.start?.date) - new Date(b.start?.dateTime || b.start?.date)
       )
-      _reconcileWeek(timeMin, timeMax).catch(() => {})
+      _reconcileWeek(timeMin, timeMax, loadedCalHrefs).catch(() => {})
     } finally {
-      loading.value = false
+      if (seq === _loadSeq) loading.value = false
     }
   }
 
-  async function _reconcileWeek(timeMin, timeMax) {
+  // taskId → consecutive loads in which its CalDAV event was confirmed missing. A link is only
+  // cleared on the second confirmation, so one slow/lagging server answer cannot wipe it.
+  const _missCounts = new Map()
+
+  async function _reconcileWeek(timeMin, timeMax, loadedCalHrefs = new Set()) {
     const boardStore = useBoardStore()
     const weekTasks = boardStore.tasks.filter(t => {
       if (t.is_completed || !t.caldav_event_uid || !t.scheduled_at) return false
@@ -541,6 +555,7 @@ export const useCalendarStore = defineStore('calendar', () => {
 
     const loadedUids = new Set(events.value.map(e => e.id))
     const missing = weekTasks.filter(t => !loadedUids.has(t.caldav_event_uid))
+    for (const t of weekTasks) if (loadedUids.has(t.caldav_event_uid)) _missCounts.delete(t.id)
     if (!missing.length) return
 
     const caldavHrefToSourceId = new Map()
@@ -555,10 +570,19 @@ export const useCalendarStore = defineStore('calendar', () => {
 
       const sourceId = caldavHrefToSourceId.get(calId)
       if (sourceId) {
+        // Only trust "not in the event list" if this calendar's query succeeded in this run;
+        // otherwise a slow or failed load would look like the event had been deleted.
+        if (!loadedCalHrefs.has(calId)) return
         const eventHref = calId.endsWith('/') ? `${calId}${eventId}.ics` : `${calId}/${eventId}.ics`
         try {
           const result = await _caldavProxy('get_event', { source_id: sourceId, event_href: eventHref })
-          if (!result.found) { await boardStore.clearScheduledTime(task.id); return }
+          if (!result.found) {
+            const misses = (_missCounts.get(task.id) || 0) + 1
+            _missCounts.set(task.id, misses)
+            if (misses >= 2) { _missCounts.delete(task.id); await boardStore.clearScheduledTime(task.id) }
+            return
+          }
+          _missCounts.delete(task.id)
           const calIso = new Date(result.event.start).toISOString()
           const savedIso = task.scheduled_at ? new Date(task.scheduled_at).toISOString() : null
           if (calIso !== savedIso) await boardStore.saveScheduledTime(task.id, calIso)
